@@ -212,7 +212,11 @@ function syncFromGitHub() {
 
       const blob      = pdfRes.getBlob().setName(filename).setContentType('application/pdf');
       const driveFile = procFolder.createFile(blob);
-      driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      try {
+        driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (shareErr) {
+        Logger.log(`⚠️ Could not set public sharing for "${filename}" (Workspace policy): ${shareErr.message}`);
+      }
 
       driveFileId      = driveFile.getId();
       synced[filename] = driveFileId;
@@ -251,7 +255,11 @@ function updateDriveIndex(folder, data) {
   } else {
     file = folder.createFile(INDEX_FILE_NAME, content, 'application/json');
   }
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (shareErr) {
+    Logger.log(`⚠️ Could not set public sharing for index.json (Workspace policy): ${shareErr.message}`);
+  }
   Logger.log(`✅ palmdeck-index.json updated in Drive (${data.length} candidate(s))`);
 }
 
@@ -315,14 +323,10 @@ function installTriggers() {
   // Remove any old triggers for this script to avoid duplicates
   existing.forEach(t => ScriptApp.deleteTrigger(t));
 
-  // 1. Instant: onChange fires the moment any Drive file is added/modified
-  ScriptApp.newTrigger('onDriveChange')
-    .forDrive()
-    .onChange()
-    .create();
-  Logger.log('✅ Instant onChange trigger installed.');
+  // NOTE: The Drive onChange trigger cannot be installed programmatically.
+  // Add it manually: Triggers page → Add Trigger → onDriveChange → From Drive → On change.
 
-  // 2. Backup: every 5 minutes — handles the GitHub→Drive sync leg
+  // Time-based backup: every 5 minutes — handles the GitHub→Drive sync leg
   ScriptApp.newTrigger('runPipeline')
     .timeBased()
     .everyMinutes(5)
