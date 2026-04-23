@@ -52,10 +52,58 @@ function getToken() {
 }
 
 // ── Web App endpoint ─────────────────────────────────────────────────────────
-// Returns palmdeck-index.json as CORS-friendly JSON.
-// PalmDeck uses this URL as CV_DRIVE_INDEX_URL.
+// Supports three actions via ?action=<value>:
+//   (default / 'index') → palmdeck-index.json  (used by PalmDeck CV picker)
+//   'status'            → { uploaded[], processed[], ts }  (pipeline monitor)
+//   'trigger'           → runs the full pipeline instantly, returns { ok, message }
 
-function doGet() {
+function _jsonOut(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  const action = (e && e.parameter && e.parameter.action) || 'index';
+
+  // ── TRIGGER ──────────────────────────────────────────────────────────────
+  if (action === 'trigger') {
+    try {
+      Logger.log('⚡ Manual trigger from PalmDeck — running pipeline…');
+      runPipeline();
+      return _jsonOut({ ok: true, triggered: true,
+        message: 'Pipeline started. Branded PDF should be ready in ~2–3 min.' });
+    } catch (err) {
+      return _jsonOut({ ok: false, error: err.message });
+    }
+  }
+
+  // ── STATUS ───────────────────────────────────────────────────────────────
+  if (action === 'status') {
+    const folder   = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    const files    = folder.getFiles();
+    const uploaded = [];
+
+    while (files.hasNext()) {
+      const f = files.next();
+      if (!VALID_MIME_TYPES.includes(f.getMimeType())) continue;
+      uploaded.push({
+        id:      f.getId(),
+        name:    f.getName(),
+        created: f.getDateCreated().toISOString(),
+        size:    f.getSize(),
+      });
+    }
+
+    const found     = folder.getFilesByName(INDEX_FILE_NAME);
+    const processed = found.hasNext()
+      ? JSON.parse(found.next().getBlob().getDataAsString())
+      : [];
+
+    return _jsonOut({ uploaded, processed, ts: new Date().toISOString() });
+  }
+
+  // ── INDEX (default) ──────────────────────────────────────────────────────
   const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
   const found  = folder.getFilesByName(INDEX_FILE_NAME);
   const json   = found.hasNext() ? found.next().getBlob().getDataAsString() : '[]';
