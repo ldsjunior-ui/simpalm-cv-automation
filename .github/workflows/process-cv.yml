@@ -1,0 +1,83 @@
+name: Process CV
+
+on:
+  push:
+    paths:
+      - 'inbox/**'
+
+permissions:
+  contents: write
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies (WeasyPrint)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libpango-1.0-0 \
+            libpangoft2-1.0-0 \
+            libpangocairo-1.0-0 \
+            libcairo2 \
+            libgdk-pixbuf2.0-0 \
+            libffi-dev \
+            shared-mime-info \
+            fonts-liberation \
+            fonts-dejavu
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Copy template
+        run: |
+          mkdir -p templates
+          cp Templates/simpalm_cv_TEMPLATE.html templates/ 2>/dev/null || true
+
+      - name: Detect new CV files
+        id: detect
+        run: |
+          # Find all PDF and DOCX files added in the latest commit
+          git diff --name-only HEAD~1 HEAD -- 'inbox/**' | \
+            grep -E '\.(pdf|docx|doc)$' > /tmp/new_cvs.txt || true
+
+          # Fallback: process all files in inbox if first commit
+          if [ ! -s /tmp/new_cvs.txt ]; then
+            find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
+              > /tmp/new_cvs.txt || true
+          fi
+
+          echo "Files to process:"
+          cat /tmp/new_cvs.txt
+          echo "count=$(wc -l < /tmp/new_cvs.txt)" >> $GITHUB_OUTPUT
+
+      - name: Process each CV
+        if: steps.detect.outputs.count > 0
+        run: |
+          while IFS= read -r cv_file; do
+            if [ -f "$cv_file" ]; then
+              echo "──────────────────────────────────"
+              echo "Processing: $cv_file"
+              python scripts/process_cv.py "$cv_file"
+            fi
+          done < /tmp/new_cvs.txt
+
+      - name: Commit processed PDFs and index
+        if: steps.detect.outputs.count > 0
+        run: |
+          git config user.name  "Simpalm CV Bot"
+          git config user.email "cv-bot@simpalmstaffing.com"
+          git add processed/ index.json
+          git diff --staged --quiet || git commit -m "🤖 Auto-process CV batch [skip ci]"
+          git push
