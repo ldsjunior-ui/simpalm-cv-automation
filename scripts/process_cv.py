@@ -39,7 +39,7 @@ SECTION_PATTERNS = {
     "summary":    r"(?i)^(professional\s+)?summary|profile|about\s+me|objective",
     "experience": r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history",
     "education":  r"(?i)^education|academic|qualification",
-    "skills":     r"(?i)^(core\s+|key\s+|technical\s+)?skills|competenc|expertise",
+    "skills":     r"(?i)^(core\s+|key\s+|technical\s+)?skills?|competenc|expertise",
     "languages":  r"(?i)^languages?",
 }
 
@@ -52,9 +52,14 @@ def split_sections(text: str) -> dict:
         stripped = line.strip()
         matched = False
         for section, pattern in SECTION_PATTERNS.items():
-            if re.match(pattern, stripped) and len(stripped) < 60:
+            if re.match(pattern, stripped):
                 current = section
                 matched = True
+                # If the header line also contains content (e.g. "SKILLS • foo • bar"),
+                # keep the part after the first word/symbol as section content
+                after = re.sub(pattern, "", stripped, count=1, flags=re.IGNORECASE).lstrip(" :–-•·▸►▪")
+                if after:
+                    sections[current].append(after)
                 break
         if not matched:
             sections[current].append(line)
@@ -67,22 +72,33 @@ EMAIL_RE    = re.compile(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}")
 PHONE_RE    = re.compile(r"[\+]?[\d][\d\s\-().]{7,16}[\d]")
 LINKEDIN_RE = re.compile(r"linkedin\.com/in/[\w\-]+", re.IGNORECASE)
 
+LOCATION_KEYWORDS = [
+    "brazil", "brasil", "remote", "international", "usa", "uk", "canada",
+    "mexico", "colombia", "argentina", "spain", "españa", "madrid", "barcelona",
+    "portugal", "chile", "peru", "brasília", "são paulo", "rio de janeiro",
+    "distrito federal", "new york", "miami", "california", "london",
+]
+
 def parse_header(header_text: str) -> dict:
     lines = [l.strip() for l in header_text.splitlines() if l.strip()]
 
     name     = lines[0] if lines else "Candidate"
-    title    = lines[1] if len(lines) > 1 and not EMAIL_RE.search(lines[1]) else ""
     email    = next((EMAIL_RE.search(l).group() for l in lines if EMAIL_RE.search(l)), "")
     phone    = next((PHONE_RE.search(l).group().strip() for l in lines if PHONE_RE.search(l)), "")
     linkedin = next((LINKEDIN_RE.search(l).group() for l in lines if LINKEDIN_RE.search(l)), "")
 
-    # Location: look for country/city patterns after contacts
+    # Classify remaining lines as location or title
     location = ""
-    for line in lines:
-        if any(kw in line.lower() for kw in ["brazil", "remote", "international", "usa", "uk", "canada", "mexico", "colombia", "argentina"]):
-            if not EMAIL_RE.search(line) and not PHONE_RE.search(line):
-                location = line
-                break
+    title    = ""
+    for line in lines[1:]:
+        if EMAIL_RE.search(line) or PHONE_RE.search(line) or LINKEDIN_RE.search(line):
+            continue
+        ll = line.lower()
+        is_location = any(kw in ll for kw in LOCATION_KEYWORDS)
+        if is_location and not location:
+            location = line
+        elif not title and not is_location and len(line) < 120:
+            title = line
 
     initials = "".join(w[0].upper() for w in name.split()[:2])
 
@@ -124,21 +140,30 @@ def parse_languages(lang_text: str) -> list:
     if not lang_text:
         return []
     languages = []
-    for line in lang_text.splitlines():
-        line = line.strip()
-        if not line or len(line) < 2:
+    # Split by lines first, then also by bullet/separator chars within each line
+    raw_lines = lang_text.splitlines()
+    entries = []
+    for line in raw_lines:
+        # If a single line contains multiple languages separated by bullets/pipes
+        parts = re.split(r"[•·|/\\]", line)
+        entries.extend(parts)
+
+    for entry in entries:
+        entry = entry.strip().strip("–-•·▸►▪()")
+        if not entry or len(entry) < 2:
             continue
         level = "Conversational"
         percent = 50
         for kw, pct in LEVEL_MAP.items():
-            if kw in line.lower():
+            if kw in entry.lower():
                 level = kw.capitalize()
                 percent = pct
                 break
-        # Language name: first word(s) before the level keyword
-        lang_name = re.split(r"[-–:|,]", line)[0].strip()
+        # Language name: first word(s) before any level keyword or punctuation
+        lang_name = re.split(r"[-–:|,\(]", entry)[0].strip()
         lang_name = re.sub(r"\b(" + "|".join(LEVEL_MAP.keys()) + r")\b", "", lang_name, flags=re.IGNORECASE).strip()
-        if lang_name and len(lang_name) > 1:
+        lang_name = re.sub(r"\s+", " ", lang_name).strip()
+        if lang_name and 1 < len(lang_name) < 40:
             languages.append({"name": lang_name, "level": level, "percent": percent})
     return languages[:5]
 
@@ -260,6 +285,14 @@ def parse_cv(text: str) -> dict:
     experience = parse_experience(sections.get("experience", ""))
     stats      = generate_stats(experience, languages)
     summary    = sections.get("summary", "").strip()
+
+    # Derive title from first experience role if header had none
+    if not header["candidate_title"] and experience:
+        raw = experience[0]["role"]
+        derived = re.sub(DATE_RANGE_RE, "", raw).strip().strip("–-|·").strip()
+        # Shorten long role titles to a clean summary
+        parts = re.split(r"[|,&]", derived)
+        header["candidate_title"] = " · ".join(p.strip() for p in parts[:3] if p.strip())[:100]
 
     return {
         **header,
