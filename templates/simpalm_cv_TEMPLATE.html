@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ candidate_name }} — CV Simpalm Staffing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4; margin: 0; }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #E8E2D8;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── PAGE ── */
+    .page {
+      width: 794px;
+      background: #F7F2EA;
+      box-shadow: 0 8px 60px rgba(30,39,54,0.18);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* ── TOP STRIPE ── */
+    .stripe {
+      height: 5px;
+      background: linear-gradient(90deg, #6BAED6 0%, #9ECAE1 50%, #BF9A52 100%);
+      flex-shrink: 0;
+    }
+
+    /* ══════════════════════════════════════
+       HEADER
+    ══════════════════════════════════════ */
+    .header {
+      background: #1E2736;
+      padding: 30px 40px 26px;
+      display: flex;
+      align-items: flex-start;
+      gap: 26px;
+      flex-shrink: 0;
+    }
+
+    .avatar {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6BAED6 0%, #2C3E55 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      border: 2.5px solid rgba(191,154,82,0.55);
+      flex-shrink: 0;
+    }
+
+    .header-info { flex: 1; min-width: 0; }
+
+    .candidate-name {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #F7F2EA;
+      margin-bottom: 5px;
+      line-height: 1.1;
+    }
+
+    .candidate-title {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: #BF9A52;
+      margin-bottom: 16px;
+    }
+
+    .contacts {
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: 20px;
+      row-gap: 5px;
+    }
+
+    .contact {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10.5px;
+      color: rgba(232,226,216,0.75);
+      line-height: 1;
+    }
+
+    .contact-bullet {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #6BAED6;
+      flex-shrink: 0;
+    }
+
+    .header-brand {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 5px;
+      padding-top: 4px;
+    }
+
+    .header-brand-badge {
+      background: rgba(255,255,255,0.94);
+      border-radius: 5px;
+      padding: 6px 10px 5px;
+      display: flex;
+      align-items: center;
+    }
+
+    .header-brand-badge img {
+      height: 30px;
+      width: auto;
+      display: block;
+    }
+
+    .brand-sub {
+      font-family: 'Lora', Georgia, serif;
+      font-style: italic;
+      font-size: 9px;
+      color: rgba(232,226,216,0.32);
+      text-align: right;
+      letter-spacing: 0.02em;
+    }
+
+    /* ══════════════════════════════════════
+       BODY (sidebar + main)
+    ══════════════════════════════════════ */
+    .body {
+      display: flex;
+      flex: 1;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 230px;
+      flex-shrink: 0;
+      background: #243040;
+      padding: 26px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .sb-section-label {
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #BF9A52;
+      padding-bottom: 7px;
+      border-bottom: 1px solid rgba(191,154,82,0.2);
+      margin-bottom: 11px;
+    }
+
+    /* Skills */
+    .skills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .s-pill {
+      display: inline-block;
+      background: rgba(107,174,214,0.16);
+      border: 1px solid rgba(107,174,214,0.32);
+      color: #9ECAE1;
+      font-size: 9px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 100px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    /* Languages */
+    .lang { margin-bottom: 11px; }
+    .lang:last-child { margin-bottom: 0; }
+
+    .lang-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 5px;
+    }
+
+    .lang-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: #E8E2D8;
+    }
+
+    .lang-level {
+      font-size: 9px;
+      color: rgba(158,202,225,0.75);
+      letter-spacing: 0.04em;
+    }
+
+    .lang-track {
+      height: 3px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+
+    .lang-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #6BAED6, #9ECAE1);
+      border-radius: 100px;
+    }
+
+    /* Education sidebar */
+    .edu { margin-bottom: 13px; }
+    .edu:last-child { margin-bottom: 0; }
+
+    .edu-degree {
+      font-family: 'Lora', Georgia, serif;
+      font-style: italic;
+      font-size: 11px;
+      color: #E8E2D8;
+      line-height: 1.45;
+      margin-bottom: 3px;
+    }
+
+    .edu-inst {
+      font-size: 9.5px;
+      font-weight: 600;
+      color: #BF9A52;
+      letter-spacing: 0.04em;
+    }
+
+    /* Key stats */
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 11px;
+    }
+    .stat:last-child { margin-bottom: 0; }
+
+    .stat-num {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #BF9A52;
+      line-height: 1;
+      min-width: 44px;
+    }
+
+    .stat-lbl {
+      font-size: 10px;
+      color: rgba(232,226,216,0.55);
+      line-height: 1.4;
+    }
+
+    /* ── MAIN CONTENT ── */
+    .main {
+      flex: 1;
+      padding: 26px 30px 26px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-width: 0;
+    }
+
+    .sec-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .sec-title {
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: #6BAED6;
+      white-space: nowrap;
+    }
+
+    .sec-line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(107,174,214,0.35), transparent);
+    }
+
+    /* Summary */
+    .summary {
+      font-family: 'Lora', Georgia, serif;
+      font-style: italic;
+      font-size: 12px;
+      color: #3D4358;
+      line-height: 1.85;
+      border-left: 3px solid #6BAED6;
+      padding-left: 13px;
+    }
+
+    /* Experience */
+    .exp {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .exp:last-child { margin-bottom: 0; }
+
+    .exp-rail {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+      width: 10px;
+      padding-top: 5px;
+    }
+
+    .exp-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #6BAED6;
+      flex-shrink: 0;
+      border: 1.5px solid #9ECAE1;
+    }
+
+    .exp-rail-line {
+      width: 1px;
+      flex: 1;
+      background: rgba(107,174,214,0.2);
+      margin-top: 3px;
+    }
+
+    .exp-body { flex: 1; min-width: 0; }
+
+    .exp-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 1px;
+    }
+
+    .exp-role {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #1E2736;
+      line-height: 1.2;
+    }
+
+    .exp-period {
+      font-size: 9.5px;
+      font-weight: 600;
+      color: #BF9A52;
+      white-space: nowrap;
+      padding-top: 2px;
+    }
+
+    .exp-co {
+      font-size: 10px;
+      font-weight: 600;
+      color: #6BAED6;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+    }
+
+    .exp-list { list-style: none; }
+
+    .exp-list li {
+      font-size: 10.5px;
+      color: #3D4358;
+      line-height: 1.65;
+      padding-left: 11px;
+      position: relative;
+      margin-bottom: 2px;
+    }
+
+    .exp-list li::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #BF9A52;
+      font-size: 7.5px;
+      top: 4px;
+    }
+
+    /* ══════════════════════════════════════
+       FOOTER
+    ══════════════════════════════════════ */
+    .footer {
+      background: #1E2736;
+      padding: 11px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .footer-brand {
+      background: rgba(255,255,255,0.10);
+      border-radius: 4px;
+      padding: 4px 8px;
+    }
+
+    .footer-brand img {
+      height: 18px;
+      width: auto;
+      display: block;
+      opacity: 0.70;
+    }
+
+    .footer-dots {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .footer-dots span {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #9ECAE1;
+      opacity: .5;
+    }
+
+    .footer-note {
+      font-size: 8.5px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(232,226,216,0.28);
+    }
+
+    .stripe-bottom {
+      height: 3px;
+      background: linear-gradient(90deg, #BF9A52 0%, #9ECAE1 50%, #6BAED6 100%);
+      flex-shrink: 0;
+    }
+
+    /* PRINT */
+    @media print {
+      body { background: none; padding: 0; }
+      .page { box-shadow: none; width: 210mm; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- TOP STRIPE -->
+  <div class="stripe"></div>
+
+  <!-- ═══ HEADER ═══ -->
+  <div class="header">
+    <div class="avatar">{{ candidate_initials }}</div>
+
+    <div class="header-info">
+      <div class="candidate-name">{{ candidate_name }}</div>
+      <div class="candidate-title">{{ candidate_title }}</div>
+      <div class="contacts">
+        {% if candidate_email %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_email }}</div>{% endif %}
+        {% if candidate_phone %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_phone }}</div>{% endif %}
+        {% if candidate_location %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_location }}</div>{% endif %}
+        {% if candidate_linkedin %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_linkedin }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="header-brand">
+      <div class="header-brand-badge">
+        <img src="https://simpalmstaffing.com/wp-content/uploads/2025/08/simpalm-staffing-logo.svg" alt="Simpalm Staffing">
+      </div>
+      <div class="brand-sub">Candidate Profile</div>
+    </div>
+  </div>
+
+  <!-- ═══ BODY ═══ -->
+  <div class="body">
+
+    <!-- ─── SIDEBAR ─── -->
+    <div class="sidebar">
+
+      <!-- Core Skills -->
+      {% if skills %}
+      <div>
+        <div class="sb-section-label">Core Skills</div>
+        <div class="skills">
+          {% for skill in skills %}<span class="s-pill">{{ skill }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Languages -->
+      {% if languages %}
+      <div>
+        <div class="sb-section-label">Languages</div>
+        {% for lang in languages %}
+        <div class="lang">
+          <div class="lang-top"><span class="lang-name">{{ lang.name }}</span><span class="lang-level">{{ lang.level }}</span></div>
+          <div class="lang-track"><div class="lang-fill" style="width:{{ lang.percent }}%"></div></div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Education -->
+      {% if education %}
+      <div>
+        <div class="sb-section-label">Education</div>
+        {% for edu in education %}
+        <div class="edu">
+          <div class="edu-degree">{{ edu.degree }}</div>
+          <div class="edu-inst">{{ edu.institution }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- At a Glance -->
+      {% if stats %}
+      <div>
+        <div class="sb-section-label">At a Glance</div>
+        {% for stat in stats %}
+        <div class="stat">
+          <div class="stat-num">{{ stat.number }}</div>
+          <div class="stat-lbl">{{ stat.label }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+    </div><!-- /sidebar -->
+
+    <!-- ─── MAIN ─── -->
+    <div class="main">
+
+      <!-- Professional Summary -->
+      {% if summary %}
+      <div>
+        <div class="sec-head">
+          <span class="sec-title">Professional Summary</span>
+          <div class="sec-line"></div>
+        </div>
+        <p class="summary">{{ summary }}</p>
+      </div>
+      {% endif %}
+
+      <!-- Experience -->
+      {% if experience %}
+      <div>
+        <div class="sec-head">
+          <span class="sec-title">Professional Experience</span>
+          <div class="sec-line"></div>
+        </div>
+
+        {% for exp in experience %}
+        <div class="exp">
+          <div class="exp-rail">
+            <div class="exp-dot"></div>
+            {% if not loop.last %}<div class="exp-rail-line"></div>{% endif %}
+          </div>
+          <div class="exp-body">
+            <div class="exp-top">
+              <div class="exp-role">{{ exp.role }}</div>
+              <div class="exp-period">{{ exp.period }}</div>
+            </div>
+            <div class="exp-co">{{ exp.company }}</div>
+            {% if exp.bullets %}
+            <ul class="exp-list">
+              {% for bullet in exp.bullets %}<li>{{ bullet }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+
+      </div>
+      {% endif %}
+
+    </div><!-- /main -->
+  </div><!-- /body -->
+
+  <!-- ═══ FOOTER ═══ -->
+  <div class="footer">
+    <div class="footer-brand"><img src="https://simpalmstaffing.com/wp-content/uploads/2025/08/simpalm-staffing-logo.svg" alt="Simpalm Staffing"></div>
+    <div class="footer-dots"><span></span><span></span><span></span></div>
+    <div class="footer-note">Confidential &middot; For client use only</div>
+  </div>
+  <div class="stripe-bottom"></div>
+
+</div>
+</body>
+</html>
