@@ -38,6 +38,7 @@ const PROC_FOLDER_NAME = '✅ Processed CVs';
 const INDEX_FILE_NAME  = 'palmdeck-index.json';
 const PUSHED_KEY       = 'pushed_files_v2';
 const SYNCED_KEY       = 'synced_files_v2';
+const EXPIRY_DAYS      = 21;   // CVs older than this are automatically purged
 
 const VALID_MIME_TYPES = [
   'application/pdf',
@@ -263,6 +264,136 @@ function updateDriveIndex(folder, data) {
   Logger.log(`✅ palmdeck-index.json updated in Drive (${data.length} candidate(s))`);
 }
 
+// ── STEP 3: Purge CVs older than EXPIRY_DAYS ────────────────────────────────
+
+function cleanupExpiredCVs() {
+  const props   = PropertiesService.getScriptProperties();
+  const pushed  = JSON.parse(props.getProperty(PUSHED_KEY) || '{}');
+  const synced  = JSON.parse(props.getProperty(SYNCED_KEY) || '{}');
+  const cutoff  = new Date(Date.now() - EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  let   count   = 0;
+
+  // ── Part A: Trash original CVs pushed > EXPIRY_DAYS ago ──────────────────
+  for (const [fileId, info] of Object.entries(pushed)) {
+    const pushedAt = new Date(info.at || 0);
+    if (pushedAt > cutoff) continue;
+    try {
+      DriveApp.getFileById(fileId).setTrashed(true);
+      Logger.log(`🗑️ Trashed original CV: ${info.name}`);
+    } catch (e) {
+      Logger.log(`⚠️ Could not trash "${info.name}": ${e.message}`);
+    }
+    delete pushed[fileId];
+    count++;
+  }
+
+  // ── Part B: Expire processed entries older than cutoff ───────────────────
+  const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+  const found  = folder.getFilesByName(INDEX_FILE_NAME);
+  if (!found.hasNext()) {
+    Logger.log('No Drive index found — skipping processed-entry cleanup.');
+    props.setProperty(PUSHED_KEY, JSON.stringify(pushed));
+    Logger.log(`Step 3 done. ${count} expired CV(s) removed.`);
+    return;
+  }
+
+  const driveIndex = JSON.parse(found.next().getBlob().getDataAsString());
+  const toKeep     = [];
+
+  for (const entry of driveIndex) {
+    const processedAt = new Date(entry.processed || 0);
+    if (processedAt > cutoff) { toKeep.push(entry); continue; }
+
+    Logger.log(`🗑️ Expiring processed entry: ${entry.name} (${processedAt.toISOString()})`);
+
+    // Delete branded PDF from Drive
+    if (entry.driveFileId) {
+      try {
+        DriveApp.getFileById(entry.driveFileId).setTrashed(true);
+        Logger.log(`  ✅ Trashed branded PDF (Drive ID: ${entry.driveFileId})`);
+      } catch (e) {
+        Logger.log(`  ⚠️ Could not trash branded PDF: ${e.message}`);
+      }
+    }
+
+    // Remove from synced tracker (prevents re-download on next sync)
+    if (synced[entry.filename]) delete synced[entry.filename];
+
+    // Delete from GitHub: processed/<filename>
+    _ghDeleteFile(`processed/${encodeURIComponent(entry.filename)}`, `🗑️ Expired after ${EXPIRY_DAYS}d: ${entry.name}`);
+
+    // Remove from GitHub index.json
+    _ghUpdateIndex(toKeep.concat(driveIndex.filter(e => e !== entry && !toKeep.includes(e))));
+
+    count++;
+  }
+
+  // Write updated Drive index
+  updateDriveIndex(folder, toKeep);
+  props.setProperty(PUSHED_KEY, JSON.stringify(pushed));
+  props.setProperty(SYNCED_KEY, JSON.stringify(synced));
+  Logger.log(`Step 3 done. ${count} expired CV(s) cleaned up (cutoff: ${cutoff.toISOString()}).`);
+}
+
+// Delete a single file from the GitHub repo by path
+function _ghDeleteFile(path, message) {
+  const token = getToken();
+  try {
+    const getRes = UrlFetchApp.fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+        muteHttpExceptions: true }
+    );
+    if (getRes.getResponseCode() !== 200) return; // file not found — nothing to delete
+    const sha = JSON.parse(getRes.getContentText()).sha;
+    UrlFetchApp.fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`,
+      { method: 'DELETE',
+        headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json',
+                   'Content-Type': 'application/json' },
+        payload: JSON.stringify({ message, sha, branch: GH_BRANCH }),
+        muteHttpExceptions: true }
+    );
+    Logger.log(`  ✅ Deleted from GitHub: ${path}`);
+  } catch (e) {
+    Logger.log(`  ⚠️ GitHub delete failed (${path}): ${e.message}`);
+  }
+}
+
+// Overwrite GitHub index.json with a new array of entries (preserves only name/title/location/filename/processed)
+function _ghUpdateIndex(entries) {
+  const token = getToken();
+  const path  = 'index.json';
+  try {
+    // Get current SHA
+    const getRes = UrlFetchApp.fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+        muteHttpExceptions: true }
+    );
+    if (getRes.getResponseCode() !== 200) return;
+    const sha     = JSON.parse(getRes.getContentText()).sha;
+    const payload = entries.map(e => ({
+      name: e.name, title: e.title || '', location: e.location || '',
+      filename: e.filename, processed: e.processed,
+    }));
+    UrlFetchApp.fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`,
+      { method: 'PUT',
+        headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json',
+                   'Content-Type': 'application/json' },
+        payload: JSON.stringify({
+          message: `🗑️ Remove expired CVs from index`,
+          content: Utilities.base64Encode(JSON.stringify(payload, null, 2)),
+          sha, branch: GH_BRANCH }),
+        muteHttpExceptions: true }
+    );
+    Logger.log(`  ✅ GitHub index.json updated (${payload.length} remaining).`);
+  } catch (e) {
+    Logger.log(`  ⚠️ Could not update GitHub index.json: ${e.message}`);
+  }
+}
+
 // ── Main entry point (set as the trigger function) ───────────────────────────
 
 function runPipeline() {
@@ -275,6 +406,9 @@ function runPipeline() {
 
   Logger.log('\n› Step 2: Syncing processed PDFs from GitHub...');
   syncFromGitHub();
+
+  Logger.log('\n› Step 3: Cleaning up CVs older than ' + EXPIRY_DAYS + ' days...');
+  cleanupExpiredCVs();
 
   Logger.log('\n══════════════════════════════════');
   Logger.log('  Pipeline complete.');
