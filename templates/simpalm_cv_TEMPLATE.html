@@ -13,22 +13,37 @@
 
     body {
       font-family: 'Inter', -apple-system, sans-serif;
-      background: #E8E2D8;
-      display: flex;
-      justify-content: center;
-      padding: 40px 16px;
-      min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      margin: 0;
+      padding: 0;
+    }
+    @media screen {
+      body {
+        background: #E8E2D8;
+        display: flex;
+        justify-content: center;
+        padding: 40px 16px;
+        min-height: 100vh;
+      }
     }
 
     /* ── PAGE ── */
     .page {
-      width: 794px;
+      width: 210mm;
+      height: 297mm;
+      overflow: hidden;
       background: #F7F2EA;
-      box-shadow: 0 8px 60px rgba(30,39,54,0.18);
       display: flex;
       flex-direction: column;
       position: relative;
+    }
+    @media screen {
+      .page {
+        width: 794px;
+        height: auto;
+        min-height: 1122px;
+        box-shadow: 0 8px 60px rgba(30,39,54,0.18);
+      }
     }
 
     /* ── TOP STRIPE ── */
@@ -43,10 +58,10 @@
     ══════════════════════════════════════ */
     .header {
       background: #1E2736;
-      padding: 30px 40px 26px;
+      padding: 22px 36px 20px;
       display: flex;
       align-items: flex-start;
-      gap: 26px;
+      gap: 22px;
       flex-shrink: 0;
     }
 
@@ -150,28 +165,32 @@
     .body {
       display: flex;
       flex: 1;
+      overflow: hidden;
+      min-height: 0;
     }
 
     /* ── SIDEBAR ── */
     .sidebar {
-      width: 230px;
+      width: 222px;
       flex-shrink: 0;
       background: #243040;
-      padding: 26px 22px;
+      padding: 20px 18px;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      overflow: hidden;
     }
+    .sidebar > div { margin-bottom: 17px; }
+    .sidebar > div:last-child { margin-bottom: 0; }
 
     .sb-section-label {
-      font-size: 8px;
+      font-size: 7.5px;
       font-weight: 700;
       letter-spacing: 0.3em;
       text-transform: uppercase;
       color: #BF9A52;
-      padding-bottom: 7px;
+      padding-bottom: 6px;
       border-bottom: 1px solid rgba(191,154,82,0.2);
-      margin-bottom: 11px;
+      margin-bottom: 9px;
     }
 
     /* Skills */
@@ -196,7 +215,7 @@
     }
 
     /* Languages */
-    .lang { margin-bottom: 11px; }
+    .lang { margin-bottom: 8px; }
     .lang:last-child { margin-bottom: 0; }
 
     .lang-top {
@@ -232,7 +251,7 @@
     }
 
     /* Education sidebar */
-    .edu { margin-bottom: 13px; }
+    .edu { margin-bottom: 9px; }
     .edu:last-child { margin-bottom: 0; }
 
     .edu-degree {
@@ -278,18 +297,22 @@
     /* ── MAIN CONTENT ── */
     .main {
       flex: 1;
-      padding: 26px 30px 26px 28px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
+      padding: 20px 26px 20px 22px;
       min-width: 0;
+      overflow: hidden;
+    }
+
+    /* Each section block — display:block avoids WeasyPrint flex-gap quirks */
+    .main-sec {
+      display: block;
+      margin-bottom: 15px;
     }
 
     .sec-head {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 12px;
+      margin-bottom: 9px;
     }
 
     .sec-title {
@@ -311,18 +334,18 @@
     .summary {
       font-family: 'Lora', Georgia, serif;
       font-style: italic;
-      font-size: 12px;
+      font-size: 10.5px;
       color: #3D4358;
-      line-height: 1.85;
+      line-height: 1.6;
       border-left: 3px solid #6BAED6;
-      padding-left: 13px;
+      padding-left: 12px;
     }
 
     /* Experience */
     .exp {
       display: flex;
-      gap: 12px;
-      margin-bottom: 14px;
+      gap: 10px;
+      margin-bottom: 11px;
     }
     .exp:last-child { margin-bottom: 0; }
 
@@ -387,12 +410,12 @@
     .exp-list { list-style: none; }
 
     .exp-list li {
-      font-size: 10.5px;
+      font-size: 10px;
       color: #3D4358;
-      line-height: 1.65;
+      line-height: 1.5;
       padding-left: 11px;
       position: relative;
-      margin-bottom: 2px;
+      margin-bottom: 1px;
     }
 
     .exp-list li::before {
@@ -459,7 +482,7 @@
     /* PRINT */
     @media print {
       body { background: none; padding: 0; }
-      .page { box-shadow: none; width: 210mm; }
+      .page { box-shadow: none; }
     }
   </style>
 </head>
@@ -555,7 +578,7 @@
 
       <!-- Professional Summary -->
       {% if summary %}
-      <div>
+      <div class="main-sec">
         <div class="sec-head">
           <span class="sec-title">Professional Summary</span>
           <div class="sec-line"></div>
@@ -566,7 +589,7 @@
 
       <!-- Experience -->
       {% if experience %}
-      <div>
+      <div class="main-sec">
         <div class="sec-head">
           <span class="sec-title">Professional Experience</span>
           <div class="sec-line"></div>
