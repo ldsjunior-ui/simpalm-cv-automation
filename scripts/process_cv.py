@@ -236,63 +236,92 @@ def parse_education(edu_text: str) -> list:
 # ── Experience Parsing ────────────────────────────────────────────────────────
 
 DATE_RANGE_RE = re.compile(
-    # Matches full patterns like:
-    #   "November 2024 – Present"   "Oct 2023 – Apr 2024"
-    #   "2024 – Present"            "2018–2019"
-    r"(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+)?"  # optional start month
-    r"\d{4}"                                                                   # start year
-    r"\s*[-–—to]+\s*"                                                          # separator
-    r"(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+)?"  # optional end month
-    r"(?:present|current|now|\d{4})",                                          # end (year or keyword)
+    # Matches date ranges in many CV formats:
+    #   "November 2024 – Present"   "Oct 2023 – Apr 2024"   "2024 – Present"
+    #   "2018–2019"                 "11/2023 – 12/2024"     "2012 to 2016"
+    r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
+    r"\d{4}"
+    r"\s*[-–—to]+\s*"
+    r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
+    r"(?:present|current|now|\d{4})",
     re.IGNORECASE
 )
 
 def parse_experience(exp_text: str) -> list:
     """
-    Robust experience parser handling two common PDF formats:
+    Robust experience parser handling three common PDF/DOCX formats:
 
-      Format A  — date on same line as role title:
-                    "Software Engineer | Jan 2023 – Present"
+      Format A  — date on same line as role (and often company):
+                    "Software Engineer, Google  Jan 2023 – Present"
       Format B  — date on its own line (3-line header):
                     "Software Engineer"       (line N-2)
                     "Acme Corp"               (line N-1)
                     "2023 – Present"          (date boundary, line N)
+      Format C  — year in parentheses, no dash range (Additional-Experience style):
+                    "Office Manager, Visas USA (2022)"
+                    "Lawyer, TozziniFreire Advogados – Contributed ... (2022)"
 
     Strategy
     ────────
-    1. Scan every non-bullet line; if it (or it merged with the next) contains a
-       DATE_RANGE_RE match → mark it as a date boundary.
-    2. For each boundary, detect which format applies:
-         • If meaningful text remains after stripping the date → Format A
-           (the role title precedes or follows the date on the same line).
-         • Otherwise → Format B: scan BACKWARD from the boundary to collect
-           the last 2 non-bullet non-empty lines as [role_title, company].
-    3. Build a set of "header indices" for each role (the lines consumed by
-       title/company/date). When collecting bullets for role N, skip any line
-       that belongs to role N+1's header set — this prevents the next role's
-       title from leaking into the current role's bullet list.
-    4. Fallback: if no date boundaries exist, use blank-line block splitting.
+    1. Scan every non-bullet line for date boundaries:
+         a. Check the line ALONE for DATE_RANGE_RE.
+         b. Merge with next line ONLY to catch a date that wraps to the next line;
+            the match MUST start within the current line's portion — never in the
+            next line. This prevents the last bullet of role N from being tagged as
+            a boundary because role N+1's date bleeds into the merged string.
+         c. Also flag lines ending with (YYYY) or (YYYY–YYYY) as boundaries
+            (Format C "Additional Experience" entries).
+    2. For each boundary determine role / company / period:
+         • Format A: meaningful text before/around the date → extract role and
+           company by splitting at the last ", " (company is the short suffix after).
+         • Format B: no text on the date line → backward-scan 2 lines for title/co.
+         • Format C: year in parens at end → role is everything before the paren.
+    3. Track header_indices (lines consumed by each role's header). When collecting
+       bullets for role N, skip any line owned by role N+1's header.
+    4. Fallback: if no boundaries, use blank-line block splitting.
     """
     if not exp_text:
         return []
 
     BULLET_CHARS = ("•", "·", "▸", "►", "▪", "-", "–")
+    # Supplementary: lone year in parens, e.g.  "(2022)" or "(2018–2019)"
+    PAREN_YEAR_RE = re.compile(r'\(\s*(\d{4})\s*(?:[–\-]\s*(\d{4}|\w+))?\s*\)\s*$')
+
     lines = [l.rstrip() for l in exp_text.splitlines()]
     experience = []
 
     # ── Step 1: Mark date-line boundaries ────────────────────────────────────
-    is_boundary = [False] * len(lines)
+    is_boundary   = [False] * len(lines)
+    paren_year    = {}   # i → "YYYY" or "YYYY–YYYY" for Format C entries
+
     for i, line in enumerate(lines):
         stripped = line.strip()
         if not stripped or stripped.startswith(BULLET_CHARS):
             continue
-        # Check this line alone, then merged with next (date may wrap to next line)
-        check = stripped
+
+        # (a) Direct match on this line
+        m = DATE_RANGE_RE.search(stripped)
+        if m:
+            is_boundary[i] = True
+            continue
+
+        # (b) Merge with next line — ONLY mark if match starts within stripped
         if i + 1 < len(lines):
             nxt = lines[i + 1].strip()
             if nxt and not nxt.startswith(BULLET_CHARS):
-                check = stripped + " " + nxt
-        if DATE_RANGE_RE.search(check):
+                merged = stripped + " " + nxt
+                m2 = DATE_RANGE_RE.search(merged)
+                if m2 and m2.start() < len(stripped):
+                    # Date begins in the current line → legitimate wrap boundary
+                    is_boundary[i] = True
+                    continue
+
+        # (c) Format C: line ends with (YYYY) or (YYYY–YYYY)
+        pm = PAREN_YEAR_RE.search(stripped)
+        if pm:
+            yr_start = pm.group(1)
+            yr_end   = pm.group(2) or ""
+            paren_year[i] = f"{yr_start}–{yr_end}" if yr_end else yr_start
             is_boundary[i] = True
 
     boundary_indices = [i for i, b in enumerate(is_boundary) if b]
@@ -321,50 +350,90 @@ def parse_experience(exp_text: str) -> list:
         return experience
 
     # ── Step 2: Extract role / company / period for each boundary ────────────
-    role_records = []  # list of dicts: role, company, period, bi, header_indices
+    role_records = []
+
+    def _split_role_company(text: str):
+        """
+        Split 'Role Title, Company Name' into (role, company).
+        Only splits if the suffix after the LAST comma is a plausible company
+        name: short (≤ 50 chars) and contains no ' & ' (which signals a list
+        of specialisations, not a company name).
+        Returns (text, "") if no clean split is found.
+        """
+        parts = text.rsplit(", ", 1)
+        if len(parts) == 2:
+            suffix = parts[1].strip()
+            # Reject if it looks like a list of specialisations
+            if len(suffix) <= 50 and " & " not in suffix and len(suffix) > 2:
+                return parts[0].strip(), suffix
+        return text, ""
 
     for idx, bi in enumerate(boundary_indices):
         prev_bi = boundary_indices[idx - 1] if idx > 0 else -1
 
-        # Pull period out of the date line
         date_str = lines[bi].strip()
+        header_indices = {bi}
+
+        # ── Format C: lone year in parens ────────────────────────────────────
+        if bi in paren_year:
+            period = paren_year[bi]
+            # Role is everything before the paren block, trimmed
+            role_raw = PAREN_YEAR_RE.sub("", date_str).strip().rstrip("–-|·, ")
+            role, company = _split_role_company(role_raw)
+            role_records.append({
+                "role": role, "company": company, "period": period,
+                "bi": bi, "header_indices": header_indices,
+            })
+            continue
+
+        # Pull period from the date match
         dm = DATE_RANGE_RE.search(date_str)
         period     = dm.group().strip() if dm else date_str
-        # Text remaining on the date line after removing the date match
         before_date = re.sub(DATE_RANGE_RE, "", date_str).strip().rstrip("–-|·,").strip()
 
-        # Treat pure date-artifact fragments (e.g. "/ 2011") as empty
-        if before_date and re.match(r'^[/\d\s–\-–—]+$', before_date):
+        # Treat pure date-artifact fragments (e.g. "/ 2011", "()", "(2018)") as empty
+        if before_date and re.match(r'^[/\d\s–\-—()]+$', before_date):
             before_date = ""
-
-        header_indices = {bi}  # always mark the date line as consumed
+        # Remove trailing empty parentheses left after date extraction, e.g. "… losses ()"
+        before_date = re.sub(r'\s*\(\s*\)\s*$', '', before_date).rstrip("–-|·, ").strip()
 
         if before_date:
-            # ── Format A: role title text lives on (or just before) the date line ──
-            role    = before_date
-            company = ""
-            # Look one non-empty line above bi for a company name
-            j = bi - 1
-            while j > prev_bi and not lines[j].strip():
-                j -= 1
-            if j > prev_bi:
-                potential = lines[j].strip()
-                if (potential
-                        and not potential.startswith(BULLET_CHARS)
-                        and not DATE_RANGE_RE.search(potential)):
-                    company = potential
-                    header_indices.add(j)
+            # ── Format A: role (and company) on the same line as the date ────
+            role, company_inline = _split_role_company(before_date)
+            company = company_inline
+
+            if not company:
+                # No inline company — look one non-empty line ABOVE the boundary.
+                # Accept it as the company only if:
+                #   • not a bullet char
+                #   • does not contain a date (avoids picking up previous role's date line)
+                #   • does NOT end with '.' (bullet/sentence terminator)
+                #   • short enough to be a name (≤ 70 chars)
+                # This correctly picks up "Clase Azul Mexico, Guadalajara, Jalisco"
+                # (directly above the role line in Juan Carlos's CV) while rejecting
+                # long achievement bullets that end with a period.
+                j = bi - 1
+                while j > prev_bi and not lines[j].strip():
+                    j -= 1
+                if j > prev_bi:
+                    potential = lines[j].strip()
+                    if (potential
+                            and not potential.startswith(BULLET_CHARS)
+                            and not DATE_RANGE_RE.search(potential)
+                            and not potential.endswith(".")
+                            and len(potential) <= 70):
+                        company = potential
+                        header_indices.add(j)
+
         else:
-            # ── Format B: date is alone; role title is 2 lines above the date ──
-            # Collect the last 2 non-bullet non-empty lines before bi.
-            # These are [role_title, company] (closest-to-date = company).
+            # ── Format B: date is alone; role title is 2 lines above ─────────
             title_candidates = []
             j = bi - 1
             while j > prev_bi and len(title_candidates) < 2:
                 s = lines[j].strip()
                 if s:
                     if s.startswith(BULLET_CHARS):
-                        break  # hit bullet content from the previous role
+                        break
                     title_candidates.insert(0, (j, s))
                 j -= 1
 
@@ -381,40 +450,55 @@ def parse_experience(exp_text: str) -> list:
                 company = ""
 
         role_records.append({
-            "role":           role,
-            "company":        company,
-            "period":         period,
-            "bi":             bi,
-            "header_indices": header_indices,
+            "role": role, "company": company, "period": period,
+            "bi": bi, "header_indices": header_indices,
         })
 
     # ── Step 3: Collect bullets for each role ────────────────────────────────
+    # Lines to treat as sub-section separators (skip them, don't include as bullets)
+    SUBSECTION_RE = re.compile(
+        r'^(additional\s+experience|other\s+experience|earlier\s+experience'
+        r'|earlier\s+roles?|previous\s+roles?|other\s+roles?)$',
+        re.IGNORECASE
+    )
+
     for idx, rec in enumerate(role_records):
         bi      = rec["bi"]
         next_bi = boundary_indices[idx + 1] if idx + 1 < len(boundary_indices) else len(lines)
-
-        # Lines owned by the *next* role's header — skip them when building bullets
         next_header = role_records[idx + 1]["header_indices"] if idx + 1 < len(role_records) else set()
 
         bullets = []
         for k in range(bi + 1, next_bi):
             if k in next_header:
-                continue  # belongs to the next role, not a bullet here
+                continue
             s = lines[k].strip()
             if not s:
                 continue
-            # Skip short all-caps sub-section separators (e.g. "RESPONSIBILITIES")
+            # Skip all-caps sub-section separators
             if (s == s.upper() and len(s) < 50
                     and re.search(r'[A-Z]', s)
                     and not s.startswith(BULLET_CHARS)):
+                continue
+            # Skip known sub-section labels (title-case)
+            if SUBSECTION_RE.match(s):
                 continue
             bullet = s.lstrip("•·▸►▪-– ").strip()
             if bullet and len(bullet) > 8:
                 bullets.append(bullet)
 
-        if rec["role"]:
+        clean_role = rec["role"].strip().rstrip("–-|·, ").strip()
+        # Skip entries that look like education — they belong in the education section.
+        # Only check at the START of the role string to avoid false positives like
+        # "Immigration Associates LLC" matching the word "associate".
+        _DEGREE_START_RE = re.compile(
+            r'(?i)^(bachelor|master|ph\.?d\.?|m\.?sc?\.?|b\.?sc?\.?|mba'
+            r'|post.?grad|associate\s+degree|diploma|licenci)',
+        )
+        if clean_role and _DEGREE_START_RE.match(clean_role):
+            continue
+        if clean_role:
             experience.append({
-                "role":    rec["role"][:150],
+                "role":    clean_role[:150],
                 "company": rec["company"][:120],
                 "period":  rec["period"],
                 "bullets": bullets[:6],
