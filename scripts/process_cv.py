@@ -408,20 +408,24 @@ def render_pdf(data: dict, output_path: str):
 
 INDEX_PATH = Path(__file__).parent.parent / "index.json"
 
-def update_index(data: dict, pdf_filename: str):
+def update_index(data: dict, pdf_filename: str, source_path: str = ""):
     index = json.loads(INDEX_PATH.read_text()) if INDEX_PATH.exists() else []
 
     # Remove existing entry for same candidate
     index = [e for e in index if e.get("name") != data["candidate_name"]]
 
-    index.append({
+    entry = {
         "name":      data["candidate_name"],
         "title":     data["candidate_title"],
         "location":  data["candidate_location"],
         "filename":  pdf_filename,
         "processed": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-    })
+    }
+    # Store the original inbox path so the frontend can selectively re-trigger this CV
+    if source_path:
+        entry["source_file"] = source_path.replace("\\", "/")
 
+    index.append(entry)
     INDEX_PATH.write_text(json.dumps(index, indent=2, ensure_ascii=False))
     print(f"✅ index.json updated ({len(index)} entries)")
 
@@ -462,7 +466,7 @@ def main():
     render_pdf(data, str(output_path))
 
     # 5. Update registry
-    update_index(data, pdf_filename)
+    update_index(data, pdf_filename, source_path=cv_path)
 
     print(f"\n🎉 Done! → processed/{pdf_filename}")
 
