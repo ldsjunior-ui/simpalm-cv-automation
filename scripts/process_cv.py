@@ -81,15 +81,31 @@ def split_sections(text: str) -> dict:
         stripped = line.strip()
         matched = False
         for section, pattern in SECTION_PATTERNS.items():
-            if re.match(pattern, stripped):
-                current = section
-                matched = True
-                # If the header line also contains content (e.g. "SKILLS • foo • bar"),
-                # keep the part after the first word/symbol as section content
-                after = re.sub(pattern, "", stripped, count=1, flags=re.IGNORECASE).lstrip(" :–-•·▸►▪")
-                if after:
-                    sections[current].append(after)
-                break
+            # Guard 1: true section headings are short (≤ 60 chars).
+            # Prevents "Experience in setting up Azure Data Factory..." from matching.
+            m_sec = re.match(pattern, stripped)
+            if not m_sec or len(stripped) > 60:
+                continue
+            # Guard 2: reject label lines like "Project: Enterprise Commerce Volume License"
+            # where the keyword is immediately followed by ": content".
+            # True headings are never "Keyword: some long value".
+            remaining_after_kw = stripped[m_sec.end():].lstrip()
+            if remaining_after_kw.startswith(":"):
+                continue
+            # Guard 3: reject sentence continuations like "Experience with ticketing…"
+            # or "Experience in setting up…". A true heading never starts with these
+            # relational prepositions immediately after the section keyword.
+            _first_word = remaining_after_kw.split()[0].lower() if remaining_after_kw.split() else ""
+            if _first_word in {"in", "with", "on", "as", "for", "at", "to", "from"}:
+                continue
+            current = section
+            matched = True
+            # If the header line also contains content (e.g. "SKILLS • foo • bar"),
+            # keep the part after the first word/symbol as section content
+            after = re.sub(pattern, "", stripped, count=1, flags=re.IGNORECASE).lstrip(" :–-•·▸►▪")
+            if after:
+                sections[current].append(after)
+            break
         if not matched:
             # Detect unrecognised headings: short, mostly uppercase, no lowercase letters
             if (stripped and len(stripped) <= 40
@@ -239,11 +255,12 @@ DATE_RANGE_RE = re.compile(
     # Matches date ranges in many CV formats:
     #   "November 2024 – Present"   "Oct 2023 – Apr 2024"   "2024 – Present"
     #   "2018–2019"                 "11/2023 – 12/2024"     "2012 to 2016"
+    #   "Mar 2022 Till Date"        (Indian English consulting format)
     r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
     r"\d{4}"
-    r"\s*[-–—to]+\s*"
+    r"\s*(?:[-–—]+|to|till)\s*"
     r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
-    r"(?:present|current|now|\d{4})",
+    r"(?:present|current|now|date|\d{4})",
     re.IGNORECASE
 )
 
@@ -391,8 +408,8 @@ def parse_experience(exp_text: str) -> list:
         period     = dm.group().strip() if dm else date_str
         before_date = re.sub(DATE_RANGE_RE, "", date_str).strip().rstrip("–-|·,").strip()
 
-        # Treat pure date-artifact fragments (e.g. "/ 2011", "()", "(2018)") as empty
-        if before_date and re.match(r'^[/\d\s–\-—()]+$', before_date):
+        # Treat pure date-artifact fragments (e.g. "/ 2011", "()", ":", ": ") as empty
+        if before_date and re.match(r'^[:/\d\s–\-—()]+$', before_date):
             before_date = ""
         # Remove trailing empty parentheses left after date extraction, e.g. "… losses ()"
         before_date = re.sub(r'\s*\(\s*\)\s*$', '', before_date).rstrip("–-|·, ").strip()
@@ -426,28 +443,87 @@ def parse_experience(exp_text: str) -> list:
                         header_indices.add(j)
 
         else:
-            # ── Format B: date is alone; role title is 2 lines above ─────────
-            title_candidates = []
-            j = bi - 1
-            while j > prev_bi and len(title_candidates) < 2:
-                s = lines[j].strip()
-                if s:
-                    if s.startswith(BULLET_CHARS):
-                        break
-                    title_candidates.insert(0, (j, s))
-                j -= 1
+            # ── Format B / D: date is alone on the line ───────────────────────
+            #
+            # Format D (consulting-style CVs, e.g. TCS/Accenture project sheets):
+            #   Project: <name>                   ← line above boundary
+            #   : Mar 2022 Till Date              ← boundary (before_date = "")
+            #   Client: <company>                 ← bi+1
+            #   Implementation Partner: <firm>    ← bi+2
+            #   Role: <title>                     ← bi+3
+            #   Responsibilities:                 ← bi+4
+            #
+            # Detect Format D by scanning the next few lines after the date boundary
+            # for a "Role:" label.  If found, also extract "Client:" as company.
+            # All labeled lines (Project/Client/Implementation Partner/Role/
+            # Responsibilities/Environment) are added to header_indices so they
+            # are excluded from the bullet collection loop in Step 3.
 
-            if len(title_candidates) >= 2:
-                role    = title_candidates[-2][1].rstrip("–-|·,").strip()
-                company = title_candidates[-1][1].strip()
-                header_indices.update({title_candidates[-2][0], title_candidates[-1][0]})
-            elif title_candidates:
-                role    = title_candidates[-1][1].rstrip("–-|·,").strip()
-                company = ""
-                header_indices.add(title_candidates[-1][0])
+            _next_search_end = (
+                boundary_indices[idx + 1] if idx + 1 < len(boundary_indices) else len(lines)
+            )
+            _ROLE_LABEL_RE   = re.compile(r'^Role\s*:\s*', re.IGNORECASE)
+            _CLIENT_LABEL_RE = re.compile(r'^Client\s*:\s*', re.IGNORECASE)
+            _SKIP_AHEAD_RE   = re.compile(
+                r'^(project|implementation\s+partner|responsibilities|environment'
+                r'|role|client)\s*:',
+                re.IGNORECASE,
+            )
+
+            role_d    = ""
+            company_d = ""
+
+            for k in range(bi + 1, min(bi + 10, _next_search_end)):
+                s = lines[k].strip()
+                if not s:
+                    continue
+                if _ROLE_LABEL_RE.match(s) and not role_d:
+                    role_d = _ROLE_LABEL_RE.sub("", s).strip().rstrip(".").strip()
+                    header_indices.add(k)
+                elif _CLIENT_LABEL_RE.match(s) and not company_d:
+                    company_d = _CLIENT_LABEL_RE.sub("", s).strip()
+                    header_indices.add(k)
+                elif _SKIP_AHEAD_RE.match(s):
+                    # Project:, Implementation Partner:, Responsibilities:, Environment:
+                    header_indices.add(k)
+
+            # Also skip the "Project:" line directly above the boundary
+            # (it belongs to the current record's header, not a previous bullet)
+            _j = bi - 1
+            while _j > prev_bi and not lines[_j].strip():
+                _j -= 1
+            if _j > prev_bi:
+                _above = lines[_j].strip()
+                if re.match(r'^Project\s*:', _above, re.IGNORECASE):
+                    header_indices.add(_j)
+
+            if role_d:
+                # ── Format D confirmed ────────────────────────────────────────
+                role    = role_d
+                company = company_d
             else:
-                role    = ""
-                company = ""
+                # ── Format B: look backward for role title 2 lines above ──────
+                title_candidates = []
+                j = bi - 1
+                while j > prev_bi and len(title_candidates) < 2:
+                    s = lines[j].strip()
+                    if s:
+                        if s.startswith(BULLET_CHARS):
+                            break
+                        title_candidates.insert(0, (j, s))
+                    j -= 1
+
+                if len(title_candidates) >= 2:
+                    role    = title_candidates[-2][1].rstrip("–-|·,").strip()
+                    company = title_candidates[-1][1].strip()
+                    header_indices.update({title_candidates[-2][0], title_candidates[-1][0]})
+                elif title_candidates:
+                    role    = title_candidates[-1][1].rstrip("–-|·,").strip()
+                    company = ""
+                    header_indices.add(title_candidates[-1][0])
+                else:
+                    role    = ""
+                    company = ""
 
         role_records.append({
             "role": role, "company": company, "period": period,
@@ -461,6 +537,13 @@ def parse_experience(exp_text: str) -> list:
         r'|earlier\s+roles?|previous\s+roles?|other\s+roles?)$',
         re.IGNORECASE
     )
+    # Consulting-format label lines that should never appear as bullets
+    # (Format D: Project:, Client:, Role:, Responsibilities:, Environment:, etc.)
+    CONSULTING_LABEL_RE = re.compile(
+        r'^(project|client|implementation\s+partner|role|responsibilities'
+        r'|environment|technology|technologies)\s*:',
+        re.IGNORECASE
+    )
 
     for idx, rec in enumerate(role_records):
         bi      = rec["bi"]
@@ -469,10 +552,17 @@ def parse_experience(exp_text: str) -> list:
 
         bullets = []
         for k in range(bi + 1, next_bi):
+            # Skip lines claimed by the next role's header (Format A/B backward scan)
             if k in next_header:
+                continue
+            # Skip lines claimed by the current role's own header (Format D labels)
+            if k in rec["header_indices"]:
                 continue
             s = lines[k].strip()
             if not s:
+                continue
+            # Skip consulting-format labeled lines (Project:, Client:, Role:, etc.)
+            if CONSULTING_LABEL_RE.match(s):
                 continue
             # Skip all-caps sub-section separators
             if (s == s.upper() and len(s) < 50
@@ -574,6 +664,107 @@ def generate_stats(experience: list, languages: list) -> list:
 
     return stats
 
+# ── LLM-based Extraction Fallback ────────────────────────────────────────────
+
+def llm_extract_cv(text: str) -> dict | None:
+    """
+    Use Claude API (claude-3-haiku) to extract a complete, structured CV dict
+    from raw text.  Only called when:
+      • ANTHROPIC_API_KEY is set in the environment
+      • The regex parser produced < 2 experience entries for a substantial CV
+
+    Returns a dict in the same shape as parse_cv(), or None on failure.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return None
+
+    try:
+        import anthropic  # already validated available at module level
+
+        client = anthropic.Anthropic(api_key=api_key)
+
+        system_prompt = (
+            "You are an expert HR data extractor. Given raw CV text, return a single "
+            "valid JSON object — no prose, no markdown, no code fences. The schema is:\n"
+            '{\n'
+            '  "candidate_name": "string",\n'
+            '  "candidate_initials": "string (2 chars)",\n'
+            '  "candidate_title": "string",\n'
+            '  "candidate_email": "string",\n'
+            '  "candidate_phone": "string",\n'
+            '  "candidate_location": "string",\n'
+            '  "candidate_linkedin": "string",\n'
+            '  "summary": "string (2-4 sentence professional summary)",\n'
+            '  "experience": [\n'
+            '    {"role": "string", "company": "string", "period": "string", '
+            '"bullets": ["string", ...]}\n'
+            '  ],\n'
+            '  "skills": ["string", ...],\n'
+            '  "languages": [{"name": "string", "level": "string", "percent": 0-100}],\n'
+            '  "education": [{"degree": "string", "institution": "string"}],\n'
+            '  "certifications": ["string", ...],\n'
+            '  "projects": [],\n'
+            '  "awards": []\n'
+            '}\n'
+            "Rules:\n"
+            "- Extract ALL work experience entries — never omit any role.\n"
+            "- For consulting CVs with Project/Client/Role labels, use 'Role' as the role "
+            "and 'Client' as the company.\n"
+            "- Include up to 6 bullet points per role (pick the most impactful ones).\n"
+            "- If no summary exists, write one (2 sentences) based on the experience.\n"
+            "- Return ONLY the JSON object — no other text."
+        )
+
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=4096,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Extract all CV data from the following text and return as JSON:\n\n"
+                        + text
+                    ),
+                }
+            ],
+            system=system_prompt,
+        )
+
+        raw = response.content[0].text.strip()
+        # Strip accidental code fences
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        data = json.loads(raw)
+
+        # Ensure required fields and types
+        data.setdefault("candidate_name", "Candidate")
+        data.setdefault("candidate_initials",
+                        "".join(w[0].upper() for w in data["candidate_name"].split()[:2]))
+        data.setdefault("candidate_title", "")
+        data.setdefault("candidate_email", "")
+        data.setdefault("candidate_phone", "")
+        data.setdefault("candidate_location", "")
+        data.setdefault("candidate_linkedin", "")
+        data.setdefault("summary", "")
+        data.setdefault("experience", [])
+        data.setdefault("skills", [])
+        data.setdefault("languages", [])
+        data.setdefault("education", [])
+        data.setdefault("certifications", [])
+        data.setdefault("projects", [])
+        data.setdefault("awards", [])
+        data.setdefault("volunteer", "")
+        data.setdefault("stats", generate_stats(data["experience"], data["languages"]))
+
+        print(f"   🤖 LLM extraction used — {len(data['experience'])} roles found")
+        return data
+
+    except Exception as exc:
+        print(f"   ⚠️  LLM extraction failed: {exc}")
+        return None
+
+
 # ── Full Parse ────────────────────────────────────────────────────────────────
 
 def parse_cv(text: str) -> dict:
@@ -591,6 +782,15 @@ def parse_cv(text: str) -> dict:
     overflow        = overflow_raw.strip() if isinstance(overflow_raw, str) else ""
     stats           = generate_stats(experience, languages)
     summary         = sections.get("summary", "").strip()
+
+    # ── LLM fallback: engage when regex extraction is clearly incomplete ──────
+    # Trigger when: (a) fewer than 2 experience roles found despite a non-trivial
+    # document, and (b) ANTHROPIC_API_KEY is available.
+    # The LLM result replaces the entire parsed dict when it finds more roles.
+    if len(experience) < 2 and len(text) > 800:
+        llm_data = llm_extract_cv(text)
+        if llm_data and len(llm_data.get("experience", [])) > len(experience):
+            return llm_data
 
     # Derive title from first experience role if header had none
     if not header["candidate_title"] and experience:

@@ -73,6 +73,8 @@ jobs:
 
       - name: Process each CV
         if: steps.detect.outputs.count > 0
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           while IFS= read -r cv_file; do
             if [ -f "$cv_file" ]; then
