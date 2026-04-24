@@ -53,27 +53,17 @@ jobs:
       - name: Detect new CV files
         id: detect
         run: |
-          # Pull latest state first (queued runs need current HEAD)
+          # Pull latest state first — queued runs need the current HEAD
           git pull --rebase origin main 2>/dev/null || true
 
-          # Files added in the triggering push
-          git diff --name-only HEAD~1 HEAD -- 'inbox/**' | \
-            grep -E '\.(pdf|docx|doc)$' > /tmp/new_cvs.txt || true
+          # Files changed in the triggering push
+          git diff --name-only HEAD~1 HEAD -- 'inbox/**' \
+            | grep -E '\.(pdf|docx|doc)$' > /tmp/new_cvs.txt || true
 
-          # Fallback: all inbox files not yet in index.json
+          # Fallback: if diff is empty, collect all inbox PDFs/DOCXs
           if [ ! -s /tmp/new_cvs.txt ]; then
-            python3 - << 'PYEOF'
-import json, pathlib
-idx_path = pathlib.Path('index.json')
-idx = json.loads(idx_path.read_text()) if idx_path.exists() else []
-processed = {e.get('filename','') for e in idx}
-for f in sorted(pathlib.Path('inbox').iterdir()):
-    if f.suffix.lower() in ('.pdf', '.docx', '.doc'):
-        candidate_out = f.stem.split(' - CV Simpalm')[0].strip() + ' - CV Simpalm Staffing.pdf'
-        if candidate_out not in processed:
-            print(f)
-PYEOF
-            > /tmp/new_cvs.txt || true
+            find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
+              | sort > /tmp/new_cvs.txt || true
           fi
 
           echo "Files to process:"
@@ -100,7 +90,6 @@ PYEOF
           git add processed/ index.json
           git diff --staged --quiet && echo "Nothing new to commit." && exit 0
           git commit -m "🤖 Auto-process CV batch [skip ci]"
-          # Retry push up to 3 times — handles sequencing edge cases
           for attempt in 1 2 3; do
             git pull --rebase origin main && git push && break
             echo "Push attempt $attempt failed — retrying in ${attempt}s..."
