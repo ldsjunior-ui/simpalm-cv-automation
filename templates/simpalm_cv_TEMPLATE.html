@@ -479,6 +479,67 @@
       flex-shrink: 0;
     }
 
+    /* Certifications / Awards sidebar compact list */
+    .sb-list-item {
+      font-size: 9.5px;
+      color: rgba(232,226,216,0.85);
+      line-height: 1.45;
+      padding-left: 12px;
+      position: relative;
+      margin-bottom: 5px;
+    }
+    .sb-list-item:last-child { margin-bottom: 0; }
+    .sb-list-item::before {
+      content: '▸';
+      position: absolute;
+      left: 0;
+      color: #BF9A52;
+      font-size: 7px;
+      top: 3px;
+    }
+
+    /* Projects (main area) */
+    .proj { margin-bottom: 10px; }
+    .proj:last-child { margin-bottom: 0; }
+
+    .proj-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    .proj-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #BF9A52;
+      flex-shrink: 0;
+    }
+
+    .proj-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #1E2736;
+      line-height: 1.2;
+    }
+
+    .proj-desc {
+      font-size: 9.5px;
+      color: #3D4358;
+      line-height: 1.5;
+      padding-left: 14px;
+    }
+
+    /* Volunteer (main area) */
+    .volunteer-text {
+      font-size: 10px;
+      color: #3D4358;
+      line-height: 1.55;
+      padding-left: 12px;
+      border-left: 2px solid rgba(191,154,82,0.4);
+    }
+
     /* PRINT */
     @media print {
       body { background: none; padding: 0; }
@@ -558,6 +619,26 @@
       </div>
       {% endif %}
 
+      <!-- Certifications -->
+      {% if certifications %}
+      <div>
+        <div class="sb-section-label">Certifications</div>
+        {% for cert in certifications %}
+        <div class="sb-list-item">{{ cert }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Awards & Honours -->
+      {% if awards %}
+      <div>
+        <div class="sb-section-label">Awards &amp; Achievements</div>
+        {% for award in awards %}
+        <div class="sb-list-item">{{ award }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       <!-- At a Glance -->
       {% if stats %}
       <div>
@@ -617,6 +698,38 @@
         </div>
         {% endfor %}
 
+      </div>
+      {% endif %}
+
+      <!-- Projects -->
+      {% if projects %}
+      <div class="main-sec">
+        <div class="sec-head">
+          <span class="sec-title">Key Projects</span>
+          <div class="sec-line"></div>
+        </div>
+        {% for proj in projects %}
+        <div class="proj">
+          <div class="proj-header">
+            <div class="proj-dot"></div>
+            <div class="proj-title">{{ proj.title }}</div>
+          </div>
+          {% if proj.description %}
+          <div class="proj-desc">{{ proj.description }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Volunteer / Community -->
+      {% if volunteer %}
+      <div class="main-sec">
+        <div class="sec-head">
+          <span class="sec-title">Volunteer &amp; Community</span>
+          <div class="sec-line"></div>
+        </div>
+        <div class="volunteer-text">{{ volunteer }}</div>
       </div>
       {% endif %}
 
