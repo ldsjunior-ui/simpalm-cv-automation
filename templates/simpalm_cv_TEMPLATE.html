@@ -30,12 +30,11 @@
     /* ── PAGE ── */
     .page {
       width: 210mm;
-      height: 297mm;
-      overflow: hidden;
       background: #F7F2EA;
       display: flex;
       flex-direction: column;
       position: relative;
+      /* NOTE: no height/overflow here — WeasyPrint paginates freely */
     }
     @media screen {
       .page {
@@ -165,7 +164,6 @@
     .body {
       display: flex;
       flex: 1;
-      overflow: hidden;
       min-height: 0;
     }
 
@@ -177,7 +175,6 @@
       padding: 20px 18px;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
     }
     .sidebar > div { margin-bottom: 17px; }
     .sidebar > div:last-child { margin-bottom: 0; }
@@ -540,10 +537,72 @@
       border-left: 2px solid rgba(191,154,82,0.4);
     }
 
-    /* PRINT */
+    /* ══════════════════════════════════════
+       PRINT — WeasyPrint multi-page layout
+       Sidebar colour persists on all pages via gradient background.
+       Content flows freely; WeasyPrint creates new A4 pages as needed.
+    ══════════════════════════════════════ */
     @media print {
-      body { background: none; padding: 0; }
-      .page { box-shadow: none; }
+      body { background: none; padding: 0; margin: 0; }
+
+      .page {
+        box-shadow: none;
+        height: auto;
+        /* Dark left column on EVERY page — even after sidebar content ends */
+        background: linear-gradient(to right, #243040 222px, #F7F2EA 222px) !important;
+      }
+
+      /* Switch from flex to float so content can break across pages */
+      .body {
+        display: block;
+        overflow: visible;
+        min-height: 0;
+      }
+
+      /* Sidebar floats left — shows content on page 1, gradient fills page 2+ */
+      .sidebar {
+        float: left;
+        width: 222px;
+        background: transparent;   /* gradient provides the dark background */
+        display: block;
+        overflow: visible;
+        min-height: 0;
+      }
+      /* Sidebar sections stack vertically */
+      .sidebar > div { display: block; }
+
+      /* Main content sits right of the float */
+      .main {
+        margin-left: 222px;
+        overflow: visible;
+      }
+
+      /* Clearfix so footer starts below floated sidebar */
+      .body::after { content: ''; display: table; clear: both; }
+      .footer { clear: both; }
+      .stripe-bottom { clear: both; }
+
+      /* ── Page-break hints ──────────────────────────────────────
+         Keep each block together; never split a role, project, or
+         section header from the first item under it.
+      ──────────────────────────────────────────────────────────── */
+      .main-sec     { break-inside: avoid; page-break-inside: avoid; }
+      .exp          { break-inside: avoid; page-break-inside: avoid; }
+      .proj         { break-inside: avoid; page-break-inside: avoid; }
+      .edu          { break-inside: avoid; page-break-inside: avoid; }
+      .lang         { break-inside: avoid; page-break-inside: avoid; }
+      .stat         { break-inside: avoid; page-break-inside: avoid; }
+      .sb-list-item { break-inside: avoid; page-break-inside: avoid; }
+
+      /* Keep section titles attached to the first item below them */
+      .sec-head        { break-after: avoid; page-break-after: avoid; }
+      .sb-section-label{ break-after: avoid; page-break-after: avoid; }
+
+      /* Small top gap when a section flows onto a new page */
+      .main-sec + .main-sec { margin-top: 18px; }
+
+      /* Stripe: keep with header */
+      .stripe { break-after: avoid; page-break-after: avoid; }
     }
   </style>
 </head>
