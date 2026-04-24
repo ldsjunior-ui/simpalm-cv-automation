@@ -5,6 +5,11 @@ on:
     paths:
       - 'inbox/**'
 
+# Serialize all CV-processing runs — prevents concurrent push conflicts
+concurrency:
+  group: cv-processing
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -48,19 +53,33 @@ jobs:
       - name: Detect new CV files
         id: detect
         run: |
-          # Find all PDF and DOCX files added in the latest commit
+          # Pull latest state first (queued runs need current HEAD)
+          git pull --rebase origin main 2>/dev/null || true
+
+          # Files added in the triggering push
           git diff --name-only HEAD~1 HEAD -- 'inbox/**' | \
             grep -E '\.(pdf|docx|doc)$' > /tmp/new_cvs.txt || true
 
-          # Fallback: process all files in inbox if first commit
+          # Fallback: all inbox files not yet in index.json
           if [ ! -s /tmp/new_cvs.txt ]; then
-            find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
-              > /tmp/new_cvs.txt || true
+            python3 - << 'PYEOF'
+import json, pathlib
+idx_path = pathlib.Path('index.json')
+idx = json.loads(idx_path.read_text()) if idx_path.exists() else []
+processed = {e.get('filename','') for e in idx}
+for f in sorted(pathlib.Path('inbox').iterdir()):
+    if f.suffix.lower() in ('.pdf', '.docx', '.doc'):
+        candidate_out = f.stem.split(' - CV Simpalm')[0].strip() + ' - CV Simpalm Staffing.pdf'
+        if candidate_out not in processed:
+            print(f)
+PYEOF
+            > /tmp/new_cvs.txt || true
           fi
 
           echo "Files to process:"
           cat /tmp/new_cvs.txt
-          echo "count=$(wc -l < /tmp/new_cvs.txt)" >> $GITHUB_OUTPUT
+          COUNT=$(grep -c . /tmp/new_cvs.txt 2>/dev/null || echo 0)
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
 
       - name: Process each CV
         if: steps.detect.outputs.count > 0
@@ -79,5 +98,11 @@ jobs:
           git config user.name  "Simpalm CV Bot"
           git config user.email "cv-bot@simpalmstaffing.com"
           git add processed/ index.json
-          git diff --staged --quiet || git commit -m "🤖 Auto-process CV batch [skip ci]"
-          git push
+          git diff --staged --quiet && echo "Nothing new to commit." && exit 0
+          git commit -m "🤖 Auto-process CV batch [skip ci]"
+          # Retry push up to 3 times — handles sequencing edge cases
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $attempt failed — retrying in ${attempt}s..."
+            sleep $attempt
+          done
