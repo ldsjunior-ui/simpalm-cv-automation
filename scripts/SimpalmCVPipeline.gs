@@ -68,12 +68,100 @@ function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || 'index';
 
   // ── TRIGGER ──────────────────────────────────────────────────────────────
+  // Two modes:
+  //   a) Selective — ?action=trigger&files=inbox/file1.pdf|inbox/file2.pdf
+  //      Re-pushes specific inbox files → GitHub diff shows only those files
+  //      → Actions workflow processes ONLY those CVs.
+  //   b) Full     — ?action=trigger (no files param)
+  //      Pushes .trigger file → workflow falls back to processing all inbox files.
   if (action === 'trigger') {
     try {
-      Logger.log('⚡ Manual trigger from PalmDeck — running pipeline…');
-      runPipeline();
-      return _jsonOut({ ok: true, triggered: true,
-        message: 'Pipeline started. Branded PDF should be ready in ~2–3 min.' });
+      const token   = getToken();
+      const headers = { Authorization: `token ${token}`,
+                        Accept: 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json' };
+
+      // ── Selective mode ────────────────────────────────────────────────────
+      const rawFiles = (e && e.parameter && e.parameter.files) || '';
+      if (rawFiles) {
+        const files   = rawFiles.split('|').map(f => f.trim()).filter(Boolean);
+        const pushed  = [];
+        const failed  = [];
+
+        for (const filePath of files) {
+          const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${encodeURIComponent(filePath).replace(/%2F/g, '/')}`;
+
+          // GET current file (need SHA + content to re-push unchanged)
+          const getRes = UrlFetchApp.fetch(apiUrl, { headers, muteHttpExceptions: true });
+          if (getRes.getResponseCode() !== 200) {
+            Logger.log(`⚠️ File not found on GitHub: ${filePath}`);
+            failed.push(filePath);
+            continue;
+          }
+          const fileData = JSON.parse(getRes.getContentText());
+          const content  = (fileData.content || '').replace(/\n/g, '');  // base64 without newlines
+
+          // Re-PUT the same content — creates a new commit that changes this inbox file
+          // → GitHub Actions diff will include ONLY this file → processed selectively
+          const putPayload = {
+            message: `🔄 Reprocess: ${filePath.split('/').pop()} (${new Date().toISOString()})`,
+            content,
+            sha:     fileData.sha,
+            branch:  GH_BRANCH,
+          };
+          const putRes = UrlFetchApp.fetch(apiUrl, {
+            method: 'PUT', headers, payload: JSON.stringify(putPayload), muteHttpExceptions: true,
+          });
+          const code = putRes.getResponseCode();
+          if (code === 200 || code === 201) {
+            Logger.log(`⚡ Re-pushed to trigger reprocess: ${filePath}`);
+            pushed.push(filePath);
+          } else {
+            Logger.log(`❌ Re-push failed (${code}) for ${filePath}: ${putRes.getContentText().slice(0,100)}`);
+            failed.push(filePath);
+          }
+        }
+
+        return _jsonOut({
+          ok: pushed.length > 0,
+          triggered: pushed.length > 0,
+          pushed: pushed.length,
+          failed: failed.length,
+          message: pushed.length > 0
+            ? `Reprocessing ${pushed.length} CV(s) via GitHub Actions. Ready in ~2–3 min.`
+            : 'No files were pushed. Check that source_file is correct in index.json.',
+        });
+      }
+
+      // ── Full mode (no specific files) ─────────────────────────────────────
+      const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/inbox/.trigger`;
+
+      let sha;
+      const getRes = UrlFetchApp.fetch(apiUrl, { headers, muteHttpExceptions: true });
+      if (getRes.getResponseCode() === 200) {
+        sha = JSON.parse(getRes.getContentText()).sha;
+      }
+
+      const payload = {
+        message: `⚡ Manual trigger from PalmDeck — process all inbox CVs (${new Date().toISOString()})`,
+        content: Utilities.base64Encode(`trigger ${Date.now()}\n`),
+        branch:  GH_BRANCH,
+      };
+      if (sha) payload.sha = sha;
+
+      const putRes = UrlFetchApp.fetch(apiUrl, {
+        method: 'PUT', headers, payload: JSON.stringify(payload), muteHttpExceptions: true,
+      });
+      const code = putRes.getResponseCode();
+      if (code === 200 || code === 201) {
+        Logger.log('⚡ Full trigger pushed to GitHub inbox/');
+        return _jsonOut({ ok: true, triggered: true,
+          message: 'Full pipeline triggered. All inbox CVs will be processed in ~2–3 min.' });
+      } else {
+        const err = putRes.getContentText().slice(0, 200);
+        Logger.log(`❌ Trigger push failed (${code}): ${err}`);
+        return _jsonOut({ ok: false, error: `GitHub push failed (${code}): ${err}` });
+      }
     } catch (err) {
       return _jsonOut({ ok: false, error: err.message });
     }
@@ -415,62 +503,31 @@ function runPipeline() {
   Logger.log('══════════════════════════════════\n');
 }
 
-// ── Instant trigger: fires the moment a file lands in the folder ─────────────
-// The onChange Drive trigger fires for ANY Drive change.
-// We filter to only act when a new CV appears in our specific folder.
+// ── Auto-trigger DISABLED ─────────────────────────────────────────────────────
+// Pipeline now runs ONLY when the user explicitly presses "Trigger Now" in PalmDeck.
+// onDriveChange kept for reference but will not fire (trigger not installed).
+// To re-enable auto-processing: install an onChange trigger pointing to onDriveChange.
 
 function onDriveChange(e) {
-  if (!e || e.changeType !== 'ADD') return;  // only care about new files
-
-  try {
-    const fileId = e.driveEvent && e.driveEvent.id;
-    if (!fileId) return;
-
-    const file    = DriveApp.getFileById(fileId);
-    const mime    = file.getMimeType();
-
-    // Only PDF / DOCX / DOC
-    if (!VALID_MIME_TYPES.includes(mime)) return;
-
-    // Confirm it's inside our target folder
-    const parents = file.getParents();
-    while (parents.hasNext()) {
-      const parent = parents.next();
-      if (parent.getId() === DRIVE_FOLDER_ID) {
-        Logger.log(`⚡ Instant trigger: "${file.getName()}" added — starting pipeline…`);
-        runPipeline();
-        return;
-      }
-    }
-  } catch (err) {
-    Logger.log(`onDriveChange error: ${err.message}`);
-  }
+  // AUTO-TRIGGER DISABLED — manual "Trigger Now" only.
+  Logger.log('onDriveChange fired but auto-trigger is disabled. Use PalmDeck → Trigger Now.');
 }
 
-// ── One-time trigger installer ────────────────────────────────────────────────
-// Run this ONCE from the Apps Script editor (Run → installTriggers).
-// It sets up both the instant onChange trigger AND the 5-min backup poller.
+// ── Trigger management ────────────────────────────────────────────────────────
+// Pipeline is MANUAL-ONLY. Run removeAllTriggers() once from the editor to
+// disable any existing auto-triggers that may have been installed previously.
 
-function installTriggers() {
+function removeAllTriggers() {
   const existing = ScriptApp.getProjectTriggers();
-
-  // Remove any old triggers for this script to avoid duplicates
   existing.forEach(t => ScriptApp.deleteTrigger(t));
+  Logger.log(`✅ Removed ${existing.length} trigger(s). Pipeline is now manual-only.`);
+}
 
-  // NOTE: The Drive onChange trigger cannot be installed programmatically.
-  // Add it manually: Triggers page → Add Trigger → onDriveChange → From Drive → On change.
-
-  // Time-based backup: every 5 minutes — handles the GitHub→Drive sync leg
-  ScriptApp.newTrigger('runPipeline')
-    .timeBased()
-    .everyMinutes(5)
-    .create();
-  Logger.log('✅ 5-minute backup poller installed.');
-
-  Logger.log('\nTriggers active:');
-  ScriptApp.getProjectTriggers().forEach(t =>
-    Logger.log(`  • ${t.getHandlerFunction()} (${t.getEventType()})`)
-  );
+// Kept for documentation — NOT called anywhere active.
+// To re-enable auto-processing, restore the old installTriggers body.
+function installTriggers() {
+  Logger.log('⚠️ Auto-triggers are disabled. Pipeline runs via PalmDeck → Trigger Now only.');
+  Logger.log('   To re-enable, restore the old installTriggers() body and run it.');
 }
 
 // ── Manual helpers (run once from editor to test) ─────────────────────────────

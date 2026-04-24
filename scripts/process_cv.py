@@ -62,7 +62,7 @@ SECTION_PATTERNS = {
     "education":      r"(?i)^education|academic|qualification|degree|university|college",
     "skills":         r"(?i)^(core\s+|key\s+|technical\s+|hard\s+|soft\s+)?skills?|competenc|expertise|technologies|tools",
     "languages":      r"(?i)^languages?",
-    "certifications": r"(?i)^certif|licens|accredit|credential",
+    "certifications": r"(?i)^(?:certific\w*|licens\w*|accredit\w*|credential\w*)",
     "projects":       r"(?i)^projects?|portfolio|key\s+projects?",
     "awards":         r"(?i)^awards?|honors?|achievements?|recognition|publications?",
     "volunteer":      r"(?i)^volunteer|community|non.?profit",
@@ -234,52 +234,121 @@ def parse_education(edu_text: str) -> list:
 # ── Experience Parsing ────────────────────────────────────────────────────────
 
 DATE_RANGE_RE = re.compile(
-    r"((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s*)?\d{4}\s*[-–—to]+\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s*)?\d{4}|"
-    r"\d{4}\s*[-–—to]+\s*(present|current|now|\d{4})",
+    # Matches full patterns like:
+    #   "November 2024 – Present"   "Oct 2023 – Apr 2024"
+    #   "2024 – Present"            "2018–2019"
+    r"(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+)?"  # optional start month
+    r"\d{4}"                                                                   # start year
+    r"\s*[-–—to]+\s*"                                                          # separator
+    r"(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+)?"  # optional end month
+    r"(?:present|current|now|\d{4})",                                          # end (year or keyword)
     re.IGNORECASE
 )
 
 def parse_experience(exp_text: str) -> list:
+    """
+    Robust experience parser using line-by-line role-boundary detection.
+
+    Strategy:
+      1. Scan every non-bullet line; if it (or it merged with the next line)
+         contains a DATE_RANGE_RE match → mark it as a role boundary.
+      2. Slice the full line list into per-role blocks anchored at each boundary.
+      3. Within each block, consume lines until the date is found (role title may
+         span multiple lines before the date), then treat the rest as bullets.
+
+    This handles PDFs with no blank lines between roles and dates on separate lines.
+    """
     if not exp_text:
         return []
 
+    BULLET_CHARS = ("•", "·", "▸", "►", "▪", "-", "–")
+    lines = [l.rstrip() for l in exp_text.splitlines()]
     experience = []
-    blocks = re.split(r"\n{2,}", exp_text)
 
-    for block in blocks:
-        lines = [l.strip() for l in block.splitlines() if l.strip()]
-        if not lines:
+    # ── Step 1: Mark role-boundary lines ─────────────────────────────────────
+    is_boundary = [False] * len(lines)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(BULLET_CHARS):
+            continue
+        # Check this line alone, then merged with next (date may wrap)
+        check = stripped
+        if i + 1 < len(lines):
+            nxt = lines[i + 1].strip()
+            if nxt and not nxt.startswith(BULLET_CHARS):
+                check = stripped + " " + nxt
+        if DATE_RANGE_RE.search(check):
+            is_boundary[i] = True
+
+    boundary_indices = [i for i, b in enumerate(is_boundary) if b]
+
+    # ── Fallback: no boundaries found → use blank-line splitting ─────────────
+    if not boundary_indices:
+        for block in re.split(r"\n{2,}", exp_text):
+            blines = [l.strip() for l in block.splitlines() if l.strip()]
+            if not blines:
+                continue
+            role, company, period, bullets = blines[0], "", "", []
+            for bl in blines[1:]:
+                dm = DATE_RANGE_RE.search(bl)
+                if dm and not period:
+                    period = dm.group().strip()
+                    candidate = re.sub(DATE_RANGE_RE, "", bl).strip().rstrip("–-|·,").strip()
+                    if candidate:
+                        company = candidate
+                    continue
+                bullet = bl.lstrip("•·▸►▪-– ").strip()
+                if bullet and len(bullet) > 10:
+                    bullets.append(bullet)
+            if role:
+                experience.append({"role": role[:150], "company": company[:120],
+                                   "period": period, "bullets": bullets[:6]})
+        return experience
+
+    # ── Step 2: Slice into per-role blocks and extract fields ─────────────────
+    for idx, bi in enumerate(boundary_indices):
+        next_bi = boundary_indices[idx + 1] if idx + 1 < len(boundary_indices) else len(lines)
+        block = [l.strip() for l in lines[bi:next_bi] if l.strip()]
+        if not block:
             continue
 
         role = ""
-        company = ""
         period = ""
+        company = ""
         bullets = []
+        consumed = 0  # lines used up building role title + period
 
-        for i, line in enumerate(lines):
-            date_match = DATE_RANGE_RE.search(line)
-            if date_match:
-                period = date_match.group().strip()
-                # Role is often the line before the date, or same line
-                candidate_role = re.sub(DATE_RANGE_RE, "", line).strip().strip("–-|·")
-                if candidate_role and not role:
-                    role = candidate_role
-                elif not role and i > 0:
-                    role = lines[i - 1]
-            elif i == 0 and not role:
-                role = line
-            elif i == 1 and not company and not date_match:
-                company = line
-            elif line.startswith(("•", "·", "▸", "►", "▪", "-", "–")) or (len(line) > 20 and i > 1):
-                bullet = line.lstrip("•·▸►▪-– ").strip()
-                if bullet and len(bullet) > 10:
-                    bullets.append(bullet)
+        # Scan up to 6 lines to find the date line; accumulate role title before it
+        for j, bl in enumerate(block[:6]):
+            dm = DATE_RANGE_RE.search(bl)
+            if dm:
+                period = dm.group().strip()
+                # Text remaining on the date line (before the date) → part of role
+                before = re.sub(DATE_RANGE_RE, "", bl).strip().rstrip("–-|·,").strip()
+                if before:
+                    role = (role + " " + before).strip() if role else before
+                consumed = j + 1
+                break
+            else:
+                # Non-date line → role title continues
+                role = (role + " " + bl).strip() if role else bl
+                consumed = j + 1
+
+        # Remaining lines → bullets (skip short all-caps separators)
+        for bl in block[consumed:]:
+            if (bl == bl.upper() and len(bl) < 50
+                    and re.search(r'[A-Z]', bl)
+                    and not bl.startswith(BULLET_CHARS)):
+                continue  # looks like a sub-section header, not a bullet
+            bullet = bl.lstrip("•·▸►▪-– ").strip()
+            if bullet and len(bullet) > 8:
+                bullets.append(bullet)
 
         if role:
             experience.append({
-                "role":    role[:120],
+                "role":    role.rstrip("–-|·,").strip()[:150],
                 "company": company[:120],
-                "period":  period or "",
+                "period":  period,
                 "bullets": bullets[:6],
             })
 
@@ -292,9 +361,13 @@ def parse_certifications(text: str) -> list:
         return []
     items = []
     for line in text.splitlines():
-        line = line.strip().strip("•·▸►▪-–")
-        if line and len(line) > 4:
-            items.append(line)
+        # Certifications are often pipe-delimited on a single line:
+        # "AWS Certified Solutions Architect | Google Cloud Professional | ..."
+        parts = re.split(r"\s*\|\s*", line)
+        for part in parts:
+            part = part.strip().strip("•·▸►▪-–")
+            if part and len(part) > 4:
+                items.append(part)
     return items  # no cap
 
 # ── Projects Parsing ──────────────────────────────────────────────────────────

@@ -548,6 +548,8 @@
       .page {
         box-shadow: none;
         height: auto;
+        /* Override screen display:flex so float children expand the page correctly */
+        display: block !important;
         /* Dark left column on EVERY page — even after sidebar content ends */
         background: linear-gradient(to right, #243040 222px, #F7F2EA 222px) !important;
       }
