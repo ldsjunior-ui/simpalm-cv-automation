@@ -15,14 +15,35 @@ from datetime import datetime
 
 # ── Extraction ───────────────────────────────────────────────────────────────
 
+def fix_char_spacing(text: str) -> str:
+    """Fix PDFs where text is extracted as 'J U A N   C A R L O S' → 'JUAN CARLOS'."""
+    lines = text.splitlines()
+    fixed = []
+    for line in lines:
+        stripped = line.strip()
+        tokens = stripped.split(' ')
+        # Detect spaced-char pattern: >= 60% of tokens are single characters
+        single_chars = sum(1 for t in tokens if len(t) == 1 and t.isalpha())
+        if len(tokens) >= 6 and single_chars / len(tokens) >= 0.6:
+            # Collapse: group single chars into words separated by 2+ spaces
+            collapsed = re.sub(r'(?<=\w) (?=\w)', '', stripped)
+            # Restore word breaks (2+ spaces become single space)
+            collapsed = re.sub(r'  +', ' ', collapsed)
+            fixed.append(collapsed)
+        else:
+            fixed.append(line)
+    return '\n'.join(fixed)
+
 def extract_text_pdf(path: str) -> str:
     from pdfminer.high_level import extract_text
-    return extract_text(path)
+    raw = extract_text(path)
+    return fix_char_spacing(raw)
 
 def extract_text_docx(path: str) -> str:
     from docx import Document
     doc = Document(path)
-    return "\n".join(p.text for p in doc.paragraphs)
+    raw = "\n".join(p.text for p in doc.paragraphs)
+    return fix_char_spacing(raw)
 
 def extract_text(path: str) -> str:
     ext = Path(path).suffix.lower()
@@ -36,16 +57,24 @@ def extract_text(path: str) -> str:
 # ── Section Detection ─────────────────────────────────────────────────────────
 
 SECTION_PATTERNS = {
-    "summary":    r"(?i)^(professional\s+)?summary|profile|about\s+me|objective",
-    "experience": r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history",
-    "education":  r"(?i)^education|academic|qualification",
-    "skills":     r"(?i)^(core\s+|key\s+|technical\s+)?skills?|competenc|expertise",
-    "languages":  r"(?i)^languages?",
+    "summary":        r"(?i)^(professional\s+)?summary|profile|about\s+me|objective|overview",
+    "experience":     r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history|work\s+history",
+    "education":      r"(?i)^education|academic|qualification|degree|university|college",
+    "skills":         r"(?i)^(core\s+|key\s+|technical\s+|hard\s+|soft\s+)?skills?|competenc|expertise|technologies|tools",
+    "languages":      r"(?i)^languages?",
+    "certifications": r"(?i)^certif|licens|accredit|credential",
+    "projects":       r"(?i)^projects?|portfolio|key\s+projects?",
+    "awards":         r"(?i)^awards?|honors?|achievements?|recognition|publications?",
+    "volunteer":      r"(?i)^volunteer|community|non.?profit",
 }
 
 def split_sections(text: str) -> dict:
     lines = text.splitlines()
-    sections = {"_header": [], "summary": [], "experience": [], "education": [], "skills": [], "languages": []}
+    sections = {
+        "_header": [], "summary": [], "experience": [], "education": [],
+        "skills": [], "languages": [], "certifications": [], "projects": [],
+        "awards": [], "volunteer": [], "_overflow": [],
+    }
     current = "_header"
 
     for line in lines:
@@ -62,7 +91,16 @@ def split_sections(text: str) -> dict:
                     sections[current].append(after)
                 break
         if not matched:
-            sections[current].append(line)
+            # Detect unrecognised headings: short, mostly uppercase, no lowercase letters
+            if (stripped and len(stripped) <= 40
+                    and stripped == stripped.upper()
+                    and re.search(r'[A-Z]', stripped)
+                    and current not in ("_header",)):
+                # Stash unrecognised heading content into _overflow
+                current = "_overflow"
+                sections[current].append(line)
+            else:
+                sections[current].append(line)
 
     return {k: "\n".join(v).strip() for k, v in sections.items()}
 
@@ -124,7 +162,7 @@ def parse_skills(skills_text: str) -> list:
         s = s.strip().strip("–-•·▸►▪")
         if s and 2 < len(s) < 50:
             skills.append(s)
-    return skills[:15]  # cap at 15
+    return skills  # no cap
 
 # ── Language Parsing ──────────────────────────────────────────────────────────
 
@@ -165,7 +203,7 @@ def parse_languages(lang_text: str) -> list:
         lang_name = re.sub(r"\s+", " ", lang_name).strip()
         if lang_name and 1 < len(lang_name) < 40:
             languages.append({"name": lang_name, "level": level, "percent": percent})
-    return languages[:5]
+    return languages  # no cap
 
 # ── Education Parsing ─────────────────────────────────────────────────────────
 
@@ -191,7 +229,7 @@ def parse_education(edu_text: str) -> list:
                 institution = line
         if degree:
             education.append({"degree": degree, "institution": institution})
-    return education[:4]
+    return education  # no cap
 
 # ── Experience Parsing ────────────────────────────────────────────────────────
 
@@ -239,13 +277,50 @@ def parse_experience(exp_text: str) -> list:
 
         if role:
             experience.append({
-                "role":    role[:80],
-                "company": company[:80],
+                "role":    role[:120],
+                "company": company[:120],
                 "period":  period or "",
-                "bullets": bullets[:4],
+                "bullets": bullets[:6],
             })
 
-    return experience[:8]
+    return experience  # no cap
+
+# ── Certifications Parsing ────────────────────────────────────────────────────
+
+def parse_certifications(text: str) -> list:
+    if not text:
+        return []
+    items = []
+    for line in text.splitlines():
+        line = line.strip().strip("•·▸►▪-–")
+        if line and len(line) > 4:
+            items.append(line)
+    return items  # no cap
+
+# ── Projects Parsing ──────────────────────────────────────────────────────────
+
+def parse_projects(text: str) -> list:
+    if not text:
+        return []
+    items = []
+    blocks = re.split(r"\n{2,}", text)
+    for block in blocks:
+        lines = [l.strip() for l in block.splitlines() if l.strip()]
+        if lines:
+            items.append({"title": lines[0], "description": " ".join(lines[1:])[:300]})
+    return items  # no cap
+
+# ── Awards Parsing ────────────────────────────────────────────────────────────
+
+def parse_awards(text: str) -> list:
+    if not text:
+        return []
+    items = []
+    for line in text.splitlines():
+        line = line.strip().strip("•·▸►▪-–")
+        if line and len(line) > 4:
+            items.append(line)
+    return items  # no cap
 
 # ── Stats Generation ──────────────────────────────────────────────────────────
 
@@ -277,14 +352,20 @@ def generate_stats(experience: list, languages: list) -> list:
 # ── Full Parse ────────────────────────────────────────────────────────────────
 
 def parse_cv(text: str) -> dict:
-    sections   = split_sections(text)
-    header     = parse_header(sections.get("_header", ""))
-    skills     = parse_skills(sections.get("skills", ""))
-    languages  = parse_languages(sections.get("languages", ""))
-    education  = parse_education(sections.get("education", ""))
-    experience = parse_experience(sections.get("experience", ""))
-    stats      = generate_stats(experience, languages)
-    summary    = sections.get("summary", "").strip()
+    sections        = split_sections(text)
+    header          = parse_header(sections.get("_header", ""))
+    skills          = parse_skills(sections.get("skills", ""))
+    languages       = parse_languages(sections.get("languages", ""))
+    education       = parse_education(sections.get("education", ""))
+    experience      = parse_experience(sections.get("experience", ""))
+    certifications  = parse_certifications(sections.get("certifications", ""))
+    projects        = parse_projects(sections.get("projects", ""))
+    awards          = parse_awards(sections.get("awards", ""))
+    volunteer       = sections.get("volunteer", "").strip()
+    overflow_raw    = sections.get("_overflow", "")
+    overflow        = overflow_raw.strip() if isinstance(overflow_raw, str) else ""
+    stats           = generate_stats(experience, languages)
+    summary         = sections.get("summary", "").strip()
 
     # Derive title from first experience role if header had none
     if not header["candidate_title"] and experience:
@@ -296,12 +377,16 @@ def parse_cv(text: str) -> dict:
 
     return {
         **header,
-        "summary":    summary,
-        "skills":     skills,
-        "languages":  languages,
-        "education":  education,
-        "experience": experience,
-        "stats":      stats,
+        "summary":        summary,
+        "skills":         skills,
+        "languages":      languages,
+        "education":      education,
+        "experience":     experience,
+        "certifications": certifications,
+        "projects":       projects,
+        "awards":         awards,
+        "volunteer":      volunteer,
+        "stats":          stats,
     }
 
 # ── PDF Generation ────────────────────────────────────────────────────────────
@@ -360,10 +445,13 @@ def main():
 
     # 2. Parse structured data
     data = parse_cv(text)
-    print(f"   Candidate: {data['candidate_name']}")
-    print(f"   Title:     {data['candidate_title']}")
-    print(f"   Skills:    {len(data['skills'])}")
-    print(f"   Exp roles: {len(data['experience'])}")
+    print(f"   Candidate:      {data['candidate_name']}")
+    print(f"   Title:          {data['candidate_title']}")
+    print(f"   Skills:         {len(data['skills'])}")
+    print(f"   Exp roles:      {len(data['experience'])}")
+    print(f"   Certifications: {len(data['certifications'])}")
+    print(f"   Projects:       {len(data['projects'])}")
+    print(f"   Awards:         {len(data['awards'])}")
 
     # 3. Build output filename
     safe_name   = re.sub(r"[^\w\s-]", "", data["candidate_name"]).strip()
