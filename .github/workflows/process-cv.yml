@@ -28,19 +28,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install system dependencies (WeasyPrint)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            libpango-1.0-0 \
-            libpangoft2-1.0-0 \
-            libpangocairo-1.0-0 \
-            libcairo2 \
-            libgdk-pixbuf2.0-0 \
-            libffi-dev \
-            shared-mime-info \
-            fonts-liberation \
-            fonts-dejavu
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('scripts/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Cache apt packages (WeasyPrint system deps)
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libpango-1.0-0 libpangoft2-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info fonts-liberation fonts-dejavu
+          version: 1.0
 
       - name: Install Python dependencies
         run: pip install -r scripts/requirements.txt
