@@ -588,7 +588,10 @@
          Keep each block together; never split a role, project, or
          section header from the first item under it.
       ──────────────────────────────────────────────────────────── */
-      .main-sec     { break-inside: avoid; page-break-inside: avoid; }
+      /* NOTE: .main-sec intentionally has NO break-inside:avoid —
+         keeping it would force the entire experience section (one <div class="main-sec">
+         wrapping all roles) onto page 2, leaving a blank gap after the summary.
+         Individual .exp entries already have break-inside:avoid below. */
       .exp          { break-inside: avoid; page-break-inside: avoid; }
       .proj         { break-inside: avoid; page-break-inside: avoid; }
       .edu          { break-inside: avoid; page-break-inside: avoid; }
@@ -622,8 +625,6 @@
       <div class="candidate-name">{{ candidate_name }}</div>
       <div class="candidate-title">{{ candidate_title }}</div>
       <div class="contacts">
-        {% if candidate_email %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_email }}</div>{% endif %}
-        {% if candidate_phone %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_phone }}</div>{% endif %}
         {% if candidate_location %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_location }}</div>{% endif %}
         {% if candidate_linkedin %}<div class="contact"><span class="contact-bullet"></span>{{ candidate_linkedin }}</div>{% endif %}
       </div>

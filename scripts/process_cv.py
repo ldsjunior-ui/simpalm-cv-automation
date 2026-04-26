@@ -227,6 +227,13 @@ DEGREE_RE = re.compile(
     r"(?i)(b\.?sc?\.?|m\.?sc?\.?|ph\.?d\.?|mba|bachelor|master|post.?grad|graduate|associate|diploma|licenc)",
 )
 
+# Matches university/institution keyword so we can split compact single-line entries:
+# "Bachelor of Laws (LL.B.) Universidade do Vale do Taquari – Univates, 2018"
+_UNIV_SPLIT_RE = re.compile(
+    r"\s+(universidade|university|college|instituto|institute|school|academia|polytechnic|faculty)\b",
+    re.IGNORECASE,
+)
+
 def parse_education(edu_text: str) -> list:
     if not edu_text:
         return []
@@ -238,6 +245,22 @@ def parse_education(edu_text: str) -> list:
             continue
         degree = ""
         institution = ""
+
+        # Compact single-line format: "Bachelor of Laws University of X, 2018"
+        # Detect: only one line AND it contains a degree keyword
+        if len(lines) == 1 and DEGREE_RE.search(lines[0]):
+            line = lines[0]
+            mu = _UNIV_SPLIT_RE.search(line)
+            if mu:
+                degree      = line[:mu.start()].strip().rstrip(".")
+                institution = re.sub(r",?\s*\d{4}\s*$", "", line[mu.start():].strip()).strip()
+            else:
+                # No university keyword — strip trailing year and use as degree only
+                degree = re.sub(r",?\s*\d{4}\s*$", "", line).strip().rstrip(".")
+            if degree:
+                education.append({"degree": degree, "institution": institution})
+            continue
+
         for line in lines:
             if DEGREE_RE.search(line) and not degree:
                 degree = line
@@ -765,10 +788,106 @@ def llm_extract_cv(text: str) -> dict | None:
         return None
 
 
+# ── Bullet-section rescue ─────────────────────────────────────────────────────
+#
+# Two CV formats drop section headings into the wrong bucket:
+#
+# Pattern A — bullet-prefixed headings (DOCX with bullets):
+#   "▸ EDUCATION  Bachelor of Technology in Computer Science"
+#   "▸ CERTIFICATIONS  AWS Certified Solutions Architect"
+#   split_sections() sees "▸ …" → matches nothing → lands in active section.
+#
+# Pattern B — ALL-CAPS inline headings (single-column DOCX, no blank separator):
+#   "EDUCATION Bachelor of Laws (LL.B.) Universidade do Vale do Taquari – Univates, 2018"
+#   "CERTIFICATIONS Software Architect | EF SET English C2 Proficient | ..."
+#   "LANGUAGES English (Native/Bilingual) • Portuguese (Native) ..."
+#   split_sections() matches the keyword but Guard 1 (len > 60) rejects the line
+#   because heading + content is all on one line.
+#
+# rescue_bullet_sections() scans every section's text for both patterns and
+# re-routes the content into the correct destination section.
+
+# Pattern A — optional bullet prefix (case-insensitive)
+_BULLET_SECTION_RE = re.compile(
+    r'^[•·▸►▪\-–▶]\s*'
+    r'(education|certific\w*|licens\w*|language|qualification|degree|awards?|honors?)\b'
+    r'[\s:]*(.*)$',
+    re.IGNORECASE,
+)
+
+# Pattern B — ALL-CAPS keyword only (case-SENSITIVE to avoid false positives)
+_ALLCAPS_SECTION_RE = re.compile(
+    r'^(EDUCATION|CERTIFICATIONS?|LANGUAGES?|LICENS\w*|AWARDS?|HONORS?)\b\s*(.*)$',
+)
+
+_SECTION_KEY_MAP = {
+    "edu":    "education",
+    "qual":   "education",
+    "deg":    "education",
+    "certif": "certifications",
+    "licens": "certifications",
+    "lang":   "languages",
+    "award":  "awards",
+    "honor":  "awards",
+}
+
+def _bullet_section_target(keyword: str) -> str:
+    kl = keyword.lower()
+    for prefix, key in _SECTION_KEY_MAP.items():
+        if kl.startswith(prefix):
+            return key
+    return ""
+
+def rescue_bullet_sections(sections: dict) -> dict:
+    """
+    Re-routes bullet-prefixed or ALL-CAPS inline section headings from whichever
+    section they landed in to the correct destination section.
+    Safe to call on every CV — only modifies sections that actually contain such lines.
+    """
+    for src_key in list(sections.keys()):
+        if src_key.startswith("_"):
+            continue
+        src_text = sections[src_key]
+        if not src_text:
+            continue
+        src_lines = src_text.splitlines()
+        kept = []
+        i = 0
+        while i < len(src_lines):
+            line = src_lines[i]
+            stripped = line.strip()
+
+            # Try Pattern A (bullet-prefix) first, then Pattern B (ALL-CAPS)
+            m = _BULLET_SECTION_RE.match(stripped) or _ALLCAPS_SECTION_RE.match(stripped)
+            if m:
+                target = _bullet_section_target(m.group(1))
+                if target:
+                    inline = m.group(2).strip()
+                    # Collect subsequent non-heading lines as this section's content
+                    rescued = [inline] if inline else []
+                    i += 1
+                    while i < len(src_lines):
+                        nxt = src_lines[i].strip()
+                        if (_BULLET_SECTION_RE.match(nxt) or _ALLCAPS_SECTION_RE.match(nxt)):
+                            break
+                        rescued.append(src_lines[i])
+                        i += 1
+                    chunk = "\n".join(rescued).strip()
+                    if chunk:
+                        existing = sections.get(target, "")
+                        sections[target] = (existing + "\n\n" + chunk).strip() if existing else chunk
+                    continue  # don't add these lines to kept[]
+            kept.append(line)
+            i += 1
+        sections[src_key] = "\n".join(kept)
+    return sections
+
+
 # ── Full Parse ────────────────────────────────────────────────────────────────
 
 def parse_cv(text: str) -> dict:
     sections        = split_sections(text)
+    sections        = rescue_bullet_sections(sections)   # rescue "▸ EDUCATION …" lines
     header          = parse_header(sections.get("_header", ""))
     skills          = parse_skills(sections.get("skills", ""))
     languages       = parse_languages(sections.get("languages", ""))
