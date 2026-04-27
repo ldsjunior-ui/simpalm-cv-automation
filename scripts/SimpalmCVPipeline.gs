@@ -167,6 +167,84 @@ function doGet(e) {
     }
   }
 
+  // ── LIST_INBOX ────────────────────────────────────────────────────────────
+  // Returns all raw CV files currently in the Drive folder (processed or not).
+  // Used by PalmDeck to populate the "Select CV to process" dropdown immediately
+  // after a file is dropped in the folder — before any processing happens.
+  if (action === 'list_inbox') {
+    try {
+      const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+      const files  = folder.getFiles();
+      const inbox  = [];
+      while (files.hasNext()) {
+        const f = files.next();
+        if (!VALID_MIME_TYPES.includes(f.getMimeType())) continue;
+        inbox.push({
+          name:    f.getName(),
+          id:      f.getId(),
+          created: f.getDateCreated().toISOString(),
+          size:    f.getSize(),
+        });
+      }
+      // Newest first
+      inbox.sort((a, b) => new Date(b.created) - new Date(a.created));
+      return _jsonOut(inbox);
+    } catch (err) {
+      return _jsonOut({ error: err.message });
+    }
+  }
+
+  // ── PUSH_AND_TRIGGER ──────────────────────────────────────────────────────
+  // Reads ONE specific Drive file (by ID) and pushes it to GitHub inbox/.
+  // Because the GH Actions workflow fires on push to inbox/**, this is enough
+  // to trigger processing of ONLY that file — no other files are touched.
+  if (action === 'push_and_trigger') {
+    const fileId = e && e.parameter && e.parameter.file_id;
+    if (!fileId) return _jsonOut({ ok: false, error: 'file_id required' });
+    try {
+      const driveFile = DriveApp.getFileById(fileId);
+      const fileName  = driveFile.getName();
+      const base64    = Utilities.base64Encode(driveFile.getBlob().getBytes());
+      const token     = getToken();
+      const apiUrl    = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/inbox/${encodeURIComponent(fileName)}`;
+      const headers   = {
+        Authorization:  `token ${token}`,
+        Accept:         'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      };
+
+      // If file already exists in GitHub, we need its SHA to update it
+      let sha;
+      const getRes = UrlFetchApp.fetch(apiUrl, { headers, muteHttpExceptions: true });
+      if (getRes.getResponseCode() === 200) {
+        sha = JSON.parse(getRes.getContentText()).sha;
+      }
+
+      const putPayload = {
+        message: `📥 Process CV: ${fileName} (${new Date().toISOString()})`,
+        content: base64,
+        branch:  GH_BRANCH,
+      };
+      if (sha) putPayload.sha = sha;
+
+      const putRes = UrlFetchApp.fetch(apiUrl, {
+        method: 'PUT', headers, payload: JSON.stringify(putPayload), muteHttpExceptions: true,
+      });
+      const code = putRes.getResponseCode();
+      if (code === 200 || code === 201) {
+        Logger.log(`✅ Pushed to GitHub inbox for processing: ${fileName}`);
+        return _jsonOut({ ok: true, filename: fileName,
+          message: `${fileName} queued. Ready in ~2–3 min.` });
+      } else {
+        const err = putRes.getContentText().slice(0, 200);
+        Logger.log(`❌ GitHub push failed (${code}): ${err}`);
+        return _jsonOut({ ok: false, error: `GitHub push failed (${code}): ${err}` });
+      }
+    } catch (err) {
+      return _jsonOut({ ok: false, error: err.message });
+    }
+  }
+
   // ── STATUS ───────────────────────────────────────────────────────────────
   if (action === 'status') {
     const folder   = DriveApp.getFolderById(DRIVE_FOLDER_ID);
