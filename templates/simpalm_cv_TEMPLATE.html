@@ -579,10 +579,32 @@
         overflow: visible;
       }
 
-      /* Clearfix so footer starts below floated sidebar */
+      /* Clearfix so WeasyPrint knows the body height includes floated sidebar */
       .body::after { content: ''; display: table; clear: both; }
-      .footer { clear: both; }
-      .stripe-bottom { clear: both; }
+
+      /* ── Footer pinned to bottom of every page ──────────────────
+         position:fixed in WeasyPrint removes the element from the
+         normal flow AND paints it at the specified position on EVERY
+         page — exactly what we need for a sticky page footer.
+         bottom:3px because .stripe-bottom (3px) sits below it.       ────────────────────────────────────────────────────────── */
+      .footer {
+        position: fixed;
+        bottom: 3px;          /* sits immediately above the accent stripe */
+        left: 0;
+        right: 0;
+        clear: both;
+      }
+      .stripe-bottom {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+      }
+
+      /* Push content up so the last lines are never hidden under the fixed footer.
+         Footer (≈34px) + stripe (3px) + small gap = 44px total clearance. */
+      .main    { padding-bottom: 44px; }
+      .sidebar { padding-bottom: 44px; }
 
       /* ── Page-break hints ──────────────────────────────────────
          Keep each block together; never split a role, project, or
