@@ -173,6 +173,16 @@ def parse_header(header_text: str) -> dict:
 
 # ── Skills Parsing ────────────────────────────────────────────────────────────
 
+_SKILLS_NARRATIVE_START_RE = re.compile(
+    r'^(?:experience\s+in|hands[\s\-]+on|good\s+knowledge|working\s+knowledge|'
+    r'strong\s+|excellent\s+|proficient\s+|skilled\s+in|ability\s+to|'
+    r'expertise\s+in|responsible\s+for|knowledge\s+of|familiar\s+with|'
+    r'understanding\s+of|in\s+the\s+areas?\s+of|exposure\s+to|'
+    r'involved\s+in|worked\s+on|worked\s+with)',
+    re.IGNORECASE
+)
+
+
 def parse_skills(skills_text: str) -> list:
     if not skills_text:
         return []
@@ -189,14 +199,30 @@ def parse_skills(skills_text: str) -> list:
     skills = []
     seen = set()
     for s in raw:
-        s = s.strip().strip("–-•·▸►▪")
+        s = s.strip().strip("–-•·▸►▪").rstrip('.')
         sl = s.lower()
-        if (s and 2 < len(s) < 45
-                and sl not in seen
-                and sl not in _GENERIC
-                and not re.match(r'^[&/\-]+$', s)):
-            skills.append(s)
-            seen.add(sl)
+        # Reject: empty, too short/long, generic labels, punctuation-only
+        if not s or not (2 < len(s) < 45):
+            continue
+        if sl in seen or sl in _GENERIC:
+            continue
+        if re.match(r'^[&/\-]+$', s):
+            continue
+        # Reject narrative sentence openers ("Experience in the areas of X")
+        if _SKILLS_NARRATIVE_START_RE.match(s):
+            continue
+        # Reject obvious sentence continuations: start lowercase
+        # (comma-split from mid-sentence; exceptions: tech abbreviations like "iOS", "pH")
+        if s[0].islower() and not re.match(r'^(iOS|macOS|pH|eBay|eCommerce)\b', s):
+            continue
+        # Reject hyphenation artifacts: "Re" or short cap word at end after "and" (line-break splits)
+        if re.search(r'\s+and\s+[A-Z][a-z]{0,2}$', s):
+            continue
+        # Reject truncated items ending with "&" or "–" or "/"
+        if s[-1] in ('&', '–', '/', '\\'):
+            continue
+        skills.append(s)
+        seen.add(sl)
     return skills[:20]  # cap at 20 — sidebar pill grid looks best at ≤ 20
 
 # ── Language Parsing ──────────────────────────────────────────────────────────
@@ -347,6 +373,125 @@ DATE_RANGE_RE = re.compile(
     re.IGNORECASE
 )
 
+# ── Table-format experience helpers ──────────────────────────────────────────
+
+_EXP_TABLE_HEADER_KWS = frozenset({
+    'duration', 'organization', 'organisation', 'designation',
+    'role responsibilities', 'segment', 'domain', 'employer',
+    'company', 'designation/', 'role/', 'role'
+})
+
+def _looks_like_experience_table(lines: list) -> bool:
+    """Return True when the first few non-empty lines look like table column headers."""
+    non_empty = [l.strip().lower() for l in lines if l.strip()][:10]
+    chunk = ' '.join(non_empty)
+    hits = sum(1 for kw in ('duration', 'organization', 'organisation', 'designation', 'employer')
+               if kw in chunk)
+    return hits >= 2
+
+
+def _parse_table_experience(lines: list) -> list:
+    """
+    Reconstruct experience entries from a multi-column table extracted column-first
+    by pdfminer.  Pattern after pdfminer reads a 3–4 column table:
+
+      [header row keywords — skip]
+      [all date values grouped]       ← left column extracted first
+      [org1] [role1] [resp1]          ← remaining columns, row by row
+      [org2] [role2] [resp2]
+      ...
+
+    Strategy:
+    1. Skip lines that are pure table header keywords.
+    2. Split into groups separated by blank lines.
+    3. Classify groups as date-groups or content-groups.
+    4. Pair each date with the next (org, role, resp) triplet.
+    """
+    BULLET_CHARS = ("•", "·", "▸", "►", "▪", "-", "–")
+
+    # ── Step 1: Split into blank-line groups ──────────────────────────────────
+    groups: list[list[str]] = []
+    cur: list[str] = []
+    for line in lines:
+        s = line.strip()
+        if not s:
+            if cur:
+                groups.append(cur)
+                cur = []
+        else:
+            cur.append(s)
+    if cur:
+        groups.append(cur)
+
+    # ── Step 2: Classify each group ───────────────────────────────────────────
+    date_values: list[str] = []
+    content_groups: list[str] = []   # merged text of non-date, non-header groups
+
+    for group in groups:
+        joined = ' '.join(group).strip()
+        joined_lower = joined.lower().rstrip('/')
+
+        # Skip pure header keyword groups
+        if joined_lower in _EXP_TABLE_HEADER_KWS:
+            continue
+        # Skip multi-word header phrases
+        if all(w.lower().rstrip('/') in _EXP_TABLE_HEADER_KWS for w in re.split(r'[\s/]+', joined)):
+            continue
+
+        # Classify as date if DATE_RANGE_RE matches (and group has no bullet)
+        m = DATE_RANGE_RE.search(joined)
+        if m and not any(joined.startswith(c) for c in BULLET_CHARS):
+            # Accept as date only if the non-date remainder is short/empty
+            remainder = DATE_RANGE_RE.sub('', joined).strip().rstrip('–-|·, ')
+            if len(remainder) < 15:
+                date_values.append(m.group().strip())
+                continue
+
+        content_groups.append(joined)
+
+    if not date_values:
+        return []   # Can't reconstruct without dates — fall back to standard parser
+
+    n = len(date_values)
+
+    # ── Step 3: Pair dates with content triplets (org, role, resp) ────────────
+    # Expect n * k content groups where k ≥ 2 (at least org + role).
+    # k is determined by dividing total content groups by n.
+    k = max(2, round(len(content_groups) / n)) if n else 2
+
+    experience = []
+    for i in range(n):
+        chunk = content_groups[i * k: (i + 1) * k]
+        if not chunk:
+            break
+
+        org  = chunk[0] if len(chunk) > 0 else ""
+        role = chunk[1] if len(chunk) > 1 else ""
+        # Remaining groups as responsibility bullets
+        raw_resp = chunk[2:] if len(chunk) > 2 else []
+        bullets = []
+        for resp in raw_resp:
+            for part in re.split(r'[,;]', resp):
+                part = part.strip().lstrip("•·▸►▪-– ")
+                if part and len(part) > 5:
+                    bullets.append(part)
+        bullets = bullets[:6]
+
+        # If we only got 1 group, it's likely the org (role unknown)
+        if not role:
+            role, org = org, ""
+
+        if org or role:
+            experience.append({
+                "role":    role,
+                "company": org,
+                "period":  date_values[i],
+                "bullets": bullets,
+            })
+
+    return experience
+
+
 def parse_experience(exp_text: str) -> list:
     """
     Robust experience parser handling three common PDF/DOCX formats:
@@ -379,15 +524,28 @@ def parse_experience(exp_text: str) -> list:
     3. Track header_indices (lines consumed by each role's header). When collecting
        bullets for role N, skip any line owned by role N+1's header.
     4. Fallback: if no boundaries, use blank-line block splitting.
+
+    Format T  — multi-column HTML/PDF table (column-first pdfminer extraction):
+                  "Duration  Organization  Designation/Role  Responsibilities"
+                  [all dates grouped]  [org/role/resp per row]
+                Handled by _parse_table_experience() before the main logic.
     """
     if not exp_text:
         return []
+
+    lines = [l.rstrip() for l in exp_text.splitlines()]
+
+    # ── Format T: multi-column table ─────────────────────────────────────────
+    if _looks_like_experience_table(lines):
+        table_result = _parse_table_experience(lines)
+        if table_result:
+            return table_result
 
     BULLET_CHARS = ("•", "·", "▸", "►", "▪", "-", "–")
     # Supplementary: lone year in parens, e.g.  "(2022)" or "(2018–2019)"
     PAREN_YEAR_RE = re.compile(r'\(\s*(\d{4})\s*(?:[–\-]\s*(\d{4}|\w+))?\s*\)\s*$')
 
-    lines = [l.rstrip() for l in exp_text.splitlines()]
+    # lines was already built above (reuse it)
     experience = []
 
     # ── Step 1: Mark date-line boundaries ────────────────────────────────────
@@ -697,15 +855,200 @@ def parse_certifications(text: str) -> list:
 
 # ── Projects Parsing ──────────────────────────────────────────────────────────
 
+_CLIENT_BLOCK_RE = re.compile(r'(?i)^client\s*:', re.MULTILINE)
+
+# Labels that appear as stand-alone lines (empty value) in column-first table extraction
+_PROJ_LABEL_ONLY_RE = re.compile(
+    r'(?i)^(&\s*)?(client|domain|role|team\s+size|duration|testing\s+methodology|'
+    r'details?|project\s*&?\s*client|project)\s*[:\-–]?\s*$'
+)
+_ROLE_WORDS_RE = re.compile(
+    r'(?i)\b(engineer|lead|manager|analyst|test|qa|developer|architect|senior|junior|specialist)\b'
+)
+_DOMAIN_WORDS = frozenset({
+    'financial', 'healthcare', 'facility', 'maintenance', 'property', 'real estate',
+    'management', 'services', 'insurance', 'banking', 'retail', 'logistics',
+    'technology', 'telecom', 'manufacturing', 'automotive', 'aerospace',
+})
+# Lines whose first word is a common action/gerund verb are bullet continuations,
+# not org names — even when they start with a capital letter and lack a trailing period.
+_ACTION_START_RE = re.compile(
+    r'^(Perform|Involv|Participat|Prepar|Prioritiz|Analyz|Conduct|Support|'
+    r'Ensur|Monitor|Coordinat|Proactively|Responsib|Develop|Creat|Manag|'
+    r'Timely|Logging|Interact|Resolv|Design|Execut|Validat|Deliver|'
+    r'Regular|Implement|Review|Follow|Tracking|Reporting|Submission|'
+    r'Adhering|Re-order|Vendor|Lead\b|Worked|Supported|Helped)',
+    re.IGNORECASE
+)
+
+
+def _classify_proj_line(line: str):
+    """Return ('empty'|'label'|'rar'|'date'|'bullet'|'numeric'|'method'|'desc'|'role'|'domain'|'cont'|'meta', value)."""
+    s = line.strip()
+    if not s:
+        return 'empty', s
+    if _PROJ_LABEL_ONLY_RE.match(s):
+        return 'label', s
+    if re.match(r'(?i)^role\s*&?\s*responsibilities?\s*[:\-–]?\s*$', s):
+        return 'rar', s
+    dm = DATE_RANGE_RE.search(s)
+    if dm and len(s) < 60:
+        return 'date', dm.group().strip()
+    if s and s[0] in "•·▸►▪":
+        return 'bullet', s.lstrip("•·▸►▪-– \t").strip()
+    if re.match(r'^\d+$', s):
+        return 'numeric', s
+    if re.match(r'(?i)^(agile|waterfall|scrum|kanban|v-model|hybrid)\s*$', s):
+        return 'method', s
+    if len(s) > 80:
+        return 'desc', s
+    # Lines starting with lowercase → sentence continuation (not an org name)
+    if s[0].islower():
+        return 'cont', s
+    # Lines ending with "." are sentences/continuations, NOT org names
+    if s.endswith('.') and len(s) > 10:
+        return 'cont', s
+    # Lines starting with a common action/gerund verb → bullet continuation
+    if _ACTION_START_RE.match(s):
+        return 'cont', s
+    if _ROLE_WORDS_RE.search(s) and len(s) < 60:
+        return 'role', s
+    if any(w in s.lower() for w in _DOMAIN_WORDS) and len(s) < 70:
+        return 'domain', s
+    return 'meta', s
+
+
+def _parse_client_block_projects(text: str) -> list:
+    """
+    Parse consulting/QA-style project sections using a state machine.
+
+    The PDF table is extracted column-first, so labels and values appear
+    interleaved in non-trivial ways.  Instead of trying to match labels to values,
+    we drive a state machine through every line:
+
+      STATE_META    — collecting metadata for the current project
+      STATE_BULLETS — collecting bullet responsibilities
+
+    Transitions:
+      META → BULLETS  : when "Role & Responsibilities" heading is seen
+      BULLETS → META  : when a new [meta] (org name) line appears after bullets,
+                        which signals the start of a new project
+
+    A lone "•" bullet char followed by a [meta]-classified line means the next
+    line is actually a bullet continuation (the "•" and its text were split across
+    lines in the PDF).
+    """
+    STATE_META    = "meta"
+    STATE_BULLETS = "bullets"
+
+    items: list[dict] = []
+    cur = {"org": "", "role": "", "domain": "", "date": "", "description": "", "bullets": []}
+    state = STATE_META
+    prev_lone_bullet = False   # True when previous non-empty line was a bare "•"
+
+    def _flush():
+        if cur.get("org") or cur.get("date") or cur.get("bullets"):
+            title = cur["org"] or (cur.get("description") or "")[:60] or "Project"
+            items.append({
+                "title":       title,
+                "client":      cur["org"],
+                "role":        cur["role"],
+                "period":      cur["date"],
+                "description": (cur.get("description") or "")[:400],
+                "bullets":     cur["bullets"][:6],
+            })
+
+    def _reset() -> dict:
+        return {"org": "", "role": "", "domain": "", "date": "", "description": "", "bullets": []}
+
+    for line in text.splitlines():
+        kind, val = _classify_proj_line(line)
+
+        # A lone "•" char produces kind='bullet' with val='' — track it
+        is_lone_bullet = (kind == 'bullet' and not val)
+        if is_lone_bullet:
+            prev_lone_bullet = True
+            continue   # nothing to store yet
+
+        # If previous non-empty line was "•" and this line looks like an org name,
+        # it's actually the bullet text (the PDF split "• Text" across two lines).
+        if prev_lone_bullet and kind == 'meta':
+            kind = 'bullet'   # re-classify as bullet continuation
+        prev_lone_bullet = False
+
+        # Skip non-content line types
+        if kind in ('empty', 'numeric', 'method', 'label'):
+            continue
+
+        # "Role & Responsibilities" → switch to bullet-collection mode
+        if kind == 'rar':
+            state = STATE_BULLETS
+            continue
+
+        # ── STATE: collecting project metadata ────────────────────────────
+        if state == STATE_META:
+            if kind == 'date' and not cur['date']:
+                cur['date'] = val
+            elif kind == 'desc' and not cur['description']:
+                cur['description'] = val
+            elif kind == 'role' and not cur['role']:
+                cur['role'] = val
+            elif kind == 'domain' and not cur['domain']:
+                cur['domain'] = val
+            elif kind == 'meta' and not cur['org']:
+                cur['org'] = val
+            elif kind in ('bullet', 'cont') and val:
+                # Bullet appearing before R&R — this project's R&R section follows
+                # (shouldn't happen, but handle gracefully)
+                state = STATE_BULLETS
+                if len(val) > 5:
+                    cur['bullets'].append(val)
+
+        # ── STATE: collecting project bullets ─────────────────────────────
+        elif state == STATE_BULLETS:
+            if kind in ('bullet', 'cont') and val and len(val) > 5:
+                cur['bullets'].append(val)
+            elif kind == 'meta':
+                # New org-name line after bullets → new project starts
+                _flush()
+                cur   = _reset()
+                cur['org'] = val
+                state = STATE_META
+            elif kind == 'date' and not cur['date']:
+                # A date appearing in the bullets section belongs to this project
+                cur['date'] = val
+            # desc/role/domain in bullet state → skip (template artifacts)
+
+    _flush()   # save the last project
+    return items
+
+
 def parse_projects(text: str) -> list:
     if not text:
         return []
+
+    # ── Consulting/project-sheet format: structured Client: blocks ────────────
+    # Detected when "Client:" appears as a labeled line (at least twice for
+    # multiple projects, or once if the section is substantial).
+    client_matches = len(_CLIENT_BLOCK_RE.findall(text))
+    if client_matches >= 1:
+        result = _parse_client_block_projects(text)
+        if result:
+            return result
+
+    # ── Standard format: double-newline-separated project blocks ─────────────
     items = []
     blocks = re.split(r"\n{2,}", text)
+    # Filter out pure-label blocks (e.g. "Client:\n\nDomain:\n\n") with no real content
     for block in blocks:
         lines = [l.strip() for l in block.splitlines() if l.strip()]
-        if lines:
-            items.append({"title": lines[0], "description": " ".join(lines[1:])[:300]})
+        if not lines:
+            continue
+        first = lines[0]
+        # Skip blocks where first line is a bare label (e.g. "Client:" alone)
+        if re.match(r'(?i)^(client|domain|role|duration|testing\s+methodology)\s*:?\s*$', first):
+            continue
+        items.append({"title": first, "description": " ".join(lines[1:])[:300]})
     return items  # no cap
 
 # ── Awards Parsing ────────────────────────────────────────────────────────────
@@ -1015,11 +1358,133 @@ def parse_cv(text: str) -> dict:
 
     stats           = generate_stats(experience, languages)
 
+    # ── Overflow rescue: "ORG as ROLE\n• bullets" blocks ────────────────────
+    # Some multi-column table CVs (e.g. Venkata Satish) have all detailed
+    # experience narratives routed to _overflow because org names in ALL-CAPS
+    # trigger the overflow redirect.  Detect and rescue them here.
+    _ORG_AS_ROLE_RE = re.compile(
+        r'^(.+?)\s+as\s+(.+?)$',
+        re.IGNORECASE | re.MULTILINE
+    )
+    # Count "ORG as ROLE" matches in overflow to gauge quality
+    _oras_count = len(_ORG_AS_ROLE_RE.findall(overflow)) if overflow else 0
+    # Malformed when most entries have neither a period nor a company name
+    # (typical of multi-column table extraction garbage)
+    _no_period_no_company = sum(
+        1 for e in experience if not e.get('period') and not e.get('company')
+    )
+    _exp_malformed = (
+        not experience or
+        _no_period_no_company >= max(1, len(experience) // 2)
+    )
+    if overflow and _oras_count >= 2 and (len(experience) < 4 or _exp_malformed):
+        # Extract "ORG as ROLE\n• bullets" blocks
+        # Split on lines that match "ORG as ROLE" (non-bullet, non-empty)
+        overflow_lines = overflow.splitlines()
+        overflow_exp = []
+        cur_org = cur_role = ""
+        cur_bullets: list[str] = []
+
+        # Also extract dates from the overflow header (grouped date block)
+        # Dates appear before the "ORG as ROLE" narrative blocks.
+        # Venkata-style CVs use "Aug2023to\nMar2025" (month+year split across two lines
+        # AND no space between month abbreviation and year).
+        # Fix: collapse single newlines to spaces before date scanning so that
+        # "Aug2023to \nMar2025" becomes "Aug2023to  Mar2025" in one chunk.
+        # _OVERFLOW_DATE_RE uses [a-z]* (not \w*) so digits after month aren't consumed.
+        _OVERFLOW_DATE_RE = re.compile(
+            r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{4}'
+            r'\s*(?:[-–—]+|to|till)\s*'
+            r'(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{4}'
+            r'|present|current|now|date)',
+            re.IGNORECASE
+        )
+        # Collapse single newlines → space so split date ranges join up; keep \n\n as group seps
+        _overflow_for_dates = re.sub(r'(?<!\n)\n(?!\n)', ' ', overflow)
+        overflow_dates: list[str] = []
+        for chunk in re.split(r'\n{2,}', _overflow_for_dates):
+            chunk = chunk.strip()
+            if not chunk or len(chunk) > 70:
+                continue
+            dm = DATE_RANGE_RE.search(chunk) or _OVERFLOW_DATE_RE.search(chunk)
+            if dm:
+                overflow_dates.append(dm.group().strip())
+
+        date_iter = iter(overflow_dates)
+
+        def _flush_overflow_entry():
+            if cur_org or cur_role:
+                period = next(date_iter, "")
+                overflow_exp.append({
+                    "role":    cur_role,
+                    "company": cur_org,
+                    "period":  period,
+                    "bullets": cur_bullets[:6],
+                })
+
+        BULLET_CHARS_SET = {"•", "·", "▸", "►", "▪", "-", "–"}
+        for line in overflow_lines:
+            s = line.strip()
+            if not s:
+                continue
+            # Skip date-only lines (already captured above)
+            dm = DATE_RANGE_RE.search(s) or _OVERFLOW_DATE_RE.search(s)
+            if dm and len(s) < 50:
+                continue
+            # Skip domain/segment labels (Industrial, Medical, Rail, etc.)
+            if re.match(r'^(industrial|medical|rail|automotive|aerospace|heavy\s+engineering|'
+                         r'automotive/consumer|automotive/mfg)', s, re.IGNORECASE) and len(s) < 30:
+                continue
+
+            # Check for "ORG as ROLE" boundary
+            m_ar = re.match(r'^(.+?)\s+as\s+(.+)$', s, re.IGNORECASE)
+            if m_ar and not s.startswith(tuple(BULLET_CHARS_SET)):
+                potential_org  = m_ar.group(1).strip()
+                potential_role = m_ar.group(2).strip()
+                # Sanity: both sides should be reasonably short
+                if len(potential_org) < 80 and len(potential_role) < 60:
+                    _flush_overflow_entry()
+                    cur_org  = potential_org
+                    cur_role = potential_role
+                    cur_bullets = []
+                    continue
+
+            # Collect bullets
+            if s.startswith(tuple(BULLET_CHARS_SET)):
+                bullet = s.lstrip("•·▸►▪-– \t").strip()
+                if bullet and len(bullet) > 5:
+                    cur_bullets.append(bullet)
+
+        _flush_overflow_entry()  # last entry
+
+        # Use overflow_exp if: (a) original parse was malformed (quality beats count),
+        # or (b) overflow produced strictly more entries.
+        if overflow_exp and (_exp_malformed or len(overflow_exp) > len(experience)):
+            experience = overflow_exp
+
+    # ── Experience quality guard: detect garbage parses ───────────────────────
+    # If most experience entries have date fragments as role names (table-format
+    # parse failure), treat the parse as failed and trigger LLM fallback.
+    _DATE_FRAG_RE = re.compile(r'^\d{4}\s*(till|to|–|-|—)')
+    _HEADER_WORDS = {'duration', 'organization', 'designation', 'role', 'responsibilities',
+                     'segment', 'domain', 'employer', 'company'}
+    def _experience_is_malformed(exp_list: list) -> bool:
+        if not exp_list:
+            return True
+        bad = 0
+        for e in exp_list:
+            r = e.get('role', '').lower().strip()
+            if _DATE_FRAG_RE.match(e.get('role', '')):
+                bad += 1
+            elif r in _HEADER_WORDS:
+                bad += 1
+        return bad >= max(1, len(exp_list) // 2)
+
     # ── LLM fallback: engage when regex extraction is clearly incomplete ──────
-    # Trigger when: (a) fewer than 2 experience roles found despite a non-trivial
-    # document, and (b) ANTHROPIC_API_KEY is available.
+    # Trigger when: (a) fewer than 2 experience roles OR parse is clearly
+    # malformed (table-format garbage), AND (b) ANTHROPIC_API_KEY is available.
     # The LLM result replaces the entire parsed dict when it finds more roles.
-    if len(experience) < 2 and len(text) > 800:
+    if (_experience_is_malformed(experience) or len(experience) < 2) and len(text) > 800:
         llm_data = llm_extract_cv(text)
         if llm_data and len(llm_data.get("experience", [])) > len(experience):
             return llm_data
