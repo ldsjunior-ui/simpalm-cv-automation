@@ -17,6 +17,11 @@ from datetime import datetime
 
 def fix_char_spacing(text: str) -> str:
     """Fix PDFs where text is extracted as 'J U A N   C A R L O S' → 'JUAN CARLOS'."""
+    # Replace Private Use Area characters from Symbol/Wingdings fonts.
+    # Common examples: \uf0b7 → bullet, \uf0a7 → bullet, \uf0fc → checkbox.
+    # Normalise them all to a standard bullet so downstream parsing works correctly.
+    text = re.sub(r'[\uf000-\uf0ff]', '•', text)
+
     lines = text.splitlines()
     fixed = []
     for line in lines:
@@ -171,14 +176,28 @@ def parse_header(header_text: str) -> dict:
 def parse_skills(skills_text: str) -> list:
     if not skills_text:
         return []
-    # Split by common delimiters: comma, pipe, bullet, newline, semicolon
-    raw = re.split(r"[,|•·;\n]+", skills_text)
+    # Split by common delimiters: comma, pipe, bullet, newline, semicolon, parentheses
+    raw = re.split(r"[,|•·;\n\(\)]+", skills_text)
+    # Generic category labels that aren't specific skills (filter out)
+    _GENERIC = {
+        "methodologies","tools","technologies","skills","areas","responsibilities",
+        "reporting","ticketing","environment","technology","scripting","languages",
+        "platforms","frameworks","databases","os","operating systems","cloud",
+        "services","applications","software","systems","others","additional",
+        "technical","professional","core","key","primary","secondary",
+    }
     skills = []
+    seen = set()
     for s in raw:
         s = s.strip().strip("–-•·▸►▪")
-        if s and 2 < len(s) < 50:
+        sl = s.lower()
+        if (s and 2 < len(s) < 45
+                and sl not in seen
+                and sl not in _GENERIC
+                and not re.match(r'^[&/\-]+$', s)):
             skills.append(s)
-    return skills  # no cap
+            seen.add(sl)
+    return skills[:20]  # cap at 20 — sidebar pill grid looks best at ≤ 20
 
 # ── Language Parsing ──────────────────────────────────────────────────────────
 
@@ -190,18 +209,55 @@ LEVEL_MAP = {
     "elementary":   30, "professional": 85,
 }
 
+# Known human (natural) languages for validation.
+# Some CVs label a "Languages" section to list programming/tech languages instead.
+# Any parsed result whose name doesn't appear here is treated as a tech skill, not
+# a human language — preventing "Azure", "Python", "Docker" from polluting the
+# sidebar language bars.
+_HUMAN_LANGS = {
+    "english","spanish","portuguese","french","german","italian","mandarin",
+    "chinese","arabic","russian","japanese","korean","hindi","dutch","turkish",
+    "polish","swedish","norwegian","danish","finnish","greek","hebrew","thai",
+    "vietnamese","indonesian","malay","tagalog","urdu","bengali","punjabi",
+    "catalan","czech","slovak","romanian","hungarian","ukrainian","bulgarian",
+    "serbian","croatian","slovenian","latvian","lithuanian","estonian",
+    "swahili","yoruba","igbo","amharic","farsi","persian","pashto","nepali",
+    "sinhala","tamil","telugu","kannada","malayalam","gujarati","marathi",
+    "azerbaijani","kazakh","uzbek","georgian","armenian","albanian","macedonian",
+    "bosnian","maltese","icelandic","irish","welsh","basque","galician",
+}
+
+def _is_human_language(name: str) -> bool:
+    """Return True only if the name looks like a human/natural language."""
+    n = name.lower().strip()
+    # Hard disqualifiers: contains digits, dots (e.g. "Node.js"), slashes, hyphens
+    # that suggest tech (e.g. "CI/CD"), or is ALL_CAPS acronym (e.g. "SQL", "AWS")
+    if re.search(r'\d', n):
+        return False
+    if re.search(r'[/\\.@#]', n):
+        return False
+    # Pure-uppercase 2–5 char acronym → tech term
+    if re.fullmatch(r'[A-Z]{2,5}', name.strip()):
+        return False
+    # Long multi-word entries are likely tool descriptions, not language names
+    if len(n.split()) > 3:
+        return False
+    # Check against known human language list (prefix match to handle "Mandarin Chinese" etc.)
+    for lang in _HUMAN_LANGS:
+        if n.startswith(lang) or lang.startswith(n):
+            return True
+    return False
+
 def parse_languages(lang_text: str) -> list:
     if not lang_text:
         return []
-    languages = []
-    # Split by lines first, then also by bullet/separator chars within each line
     raw_lines = lang_text.splitlines()
     entries = []
     for line in raw_lines:
-        # If a single line contains multiple languages separated by bullets/pipes
         parts = re.split(r"[•·|/\\]", line)
         entries.extend(parts)
 
+    languages = []
     for entry in entries:
         entry = entry.strip().strip("–-•·▸►▪()")
         if not entry or len(entry) < 2:
@@ -213,13 +269,12 @@ def parse_languages(lang_text: str) -> list:
                 level = kw.capitalize()
                 percent = pct
                 break
-        # Language name: first word(s) before any level keyword or punctuation
         lang_name = re.split(r"[-–:|,\(]", entry)[0].strip()
         lang_name = re.sub(r"\b(" + "|".join(LEVEL_MAP.keys()) + r")\b", "", lang_name, flags=re.IGNORECASE).strip()
         lang_name = re.sub(r"\s+", " ", lang_name).strip()
-        if lang_name and 1 < len(lang_name) < 40:
+        if lang_name and 1 < len(lang_name) < 40 and _is_human_language(lang_name):
             languages.append({"name": lang_name, "level": level, "percent": percent})
-    return languages  # no cap
+    return languages
 
 # ── Education Parsing ─────────────────────────────────────────────────────────
 
@@ -249,23 +304,28 @@ def parse_education(edu_text: str) -> list:
         # Compact single-line format: "Bachelor of Laws University of X, 2018"
         # Detect: only one line AND it contains a degree keyword
         if len(lines) == 1 and DEGREE_RE.search(lines[0]):
-            line = lines[0]
+            # Strip leading bullet/symbol chars before processing
+            line = lines[0].lstrip("•·▸►▪-– \t")
             mu = _UNIV_SPLIT_RE.search(line)
             if mu:
                 degree      = line[:mu.start()].strip().rstrip(".")
-                institution = re.sub(r",?\s*\d{4}\s*$", "", line[mu.start():].strip()).strip()
+                # Remove trailing year patterns like "2018", "in 2014", ", 2014"
+                raw_inst    = line[mu.start():].strip()
+                institution = re.sub(r"[\s,]*\bin\s+\d{4}\b|\s*,?\s*\d{4}\s*$", "", raw_inst).strip()
             else:
                 # No university keyword — strip trailing year and use as degree only
-                degree = re.sub(r",?\s*\d{4}\s*$", "", line).strip().rstrip(".")
+                degree = re.sub(r"[\s,]*\bin\s+\d{4}\b|\s*,?\s*\d{4}\s*$", "", line).strip().rstrip(".")
             if degree:
                 education.append({"degree": degree, "institution": institution})
             continue
 
         for line in lines:
-            if DEGREE_RE.search(line) and not degree:
-                degree = line
+            # Strip leading bullet/symbol characters before matching
+            clean = line.lstrip("•·▸►▪-– \t")
+            if DEGREE_RE.search(clean) and not degree:
+                degree = clean
             elif degree and not institution:
-                institution = line.lstrip("•·▸►▪-– ").strip()
+                institution = clean
         if degree:
             # Strip trailing punctuation artifacts from degree line
             degree = degree.rstrip(".")
@@ -899,8 +959,61 @@ def parse_cv(text: str) -> dict:
     volunteer       = sections.get("volunteer", "").strip()
     overflow_raw    = sections.get("_overflow", "")
     overflow        = overflow_raw.strip() if isinstance(overflow_raw, str) else ""
-    stats           = generate_stats(experience, languages)
     summary         = sections.get("summary", "").strip()
+    # Clean up decorative bullet chars that came from Wingdings/Symbol PUA substitution
+    # (e.g. "\uf0b7" → "•" used as separators/decorators in the original PDF).
+    # A summary is a flowing paragraph — bullet chars should never appear in it.
+    summary = re.sub(r'^[•\s]+', '', summary)          # strip leading bullets/spaces
+    summary = re.sub(r'[•]+', ' ', summary)            # replace any remaining bullets with space
+    summary = re.sub(r'  +', ' ', summary).strip()     # normalise multiple spaces
+
+    # ── Tech-skills rescue: "Languages" section containing programming/tool names ──
+    # Some CVs (e.g. Indian consulting CVs) list tech tools under a heading called
+    # "Languages". parse_languages() filters those out.  If that left languages empty
+    # but the raw section text is substantial, treat it as additional skills instead.
+    lang_raw = sections.get("languages", "").strip()
+    if not languages and lang_raw and len(lang_raw) > 30:
+        rescued_skills = parse_skills(lang_raw)
+        if rescued_skills:
+            # Merge, dedup (preserve order)
+            seen = {s.lower() for s in skills}
+            for s in rescued_skills:
+                if s.lower() not in seen:
+                    skills.append(s)
+                    seen.add(s.lower())
+
+    # ── Skill inference: extract tool/software names from experience bullets ──────
+    # Only runs when no explicit skills section was found.
+    # Strategy: look for capitalized multi-word proper nouns that look like software,
+    # platforms, or methodologies — NOT verbs, NOT generic role words.
+    # Conservative: it's better to show a blank skills section than to show junk.
+    _ROLE_WORDS = {
+        "executive","manager","assistant","specialist","officer","director",
+        "head","lead","senior","junior","associate","coordinator","analyst",
+        "advisor","consultant","representative","administrator","supervisor",
+    }
+    _VERB_PATTERN = re.compile(
+        r'^(managed|led|developed|created|designed|delivered|improved|built|'
+        r'trained|coached|achieved|exceeded|analyzed|implemented|coordinated|'
+        r'supported|executed|drove|generated|increased|reduced|oversaw|handled|'
+        r'maintained|established|prepared|provided|collaborated|worked|'
+        r'facilitated|identified|ensured|conducted)\b', re.IGNORECASE
+    )
+    if not skills and experience:
+        inferred = []
+        seen = set()
+        for exp_item in experience[:4]:
+            for bullet in exp_item.get("bullets", [])[:4]:
+                # Extract parenthesised tool lists: "CRM platforms (HubSpot, GoHighLevel)"
+                for group in re.findall(r'\(([^)]{5,60})\)', bullet):
+                    for item in re.split(r'[,;]', group):
+                        item = item.strip()
+                        if 3 < len(item) < 28 and item.lower() not in seen:
+                            seen.add(item.lower())
+                            inferred.append(item)
+        skills = inferred[:15]
+
+    stats           = generate_stats(experience, languages)
 
     # ── LLM fallback: engage when regex extraction is clearly incomplete ──────
     # Trigger when: (a) fewer than 2 experience roles found despite a non-trivial
