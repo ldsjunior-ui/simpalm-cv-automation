@@ -481,6 +481,40 @@ def _parse_table_experience(lines: list) -> list:
         if not role:
             role, org = org, ""
 
+        # ── Column-order sanity check ────────────────────────────────────────
+        # Some PDF rows are extracted in role→resp→org order instead of
+        # org→role→resp (e.g. Mobilyte row in Vibhor's CV).
+        # Detect: assigned "company" has role keywords but no company indicators,
+        #         AND one of the bullet strings has company-name indicators.
+        _CO_HINT = re.compile(
+            r'\b(pvt|ltd|inc|llc|corp|gmbh|plc|solutions?|technologies?|'
+            r'services?|systems?|industries|associates?|partners?|enterprises?|'
+            r'software|digital|global|group)\b', re.IGNORECASE
+        )
+        _ROLE_KW = re.compile(
+            r'\b(engineer|manager|lead|designer|developer|analyst|consultant|'
+            r'director|architect|officer|executive|specialist|coordinator|'
+            r'assistant|tester|programmer|scientist|supervisor)\b', re.IGNORECASE
+        )
+        if (org and role and bullets
+                and _ROLE_KW.search(org)
+                and not _CO_HINT.search(org)
+                and _CO_HINT.search(bullets[-1])):
+            # Last "bullet" is actually the company; role was assigned to org slot.
+            # Order was: role → responsibilities → org
+            actual_org  = bullets.pop()
+            actual_role = org
+            # The "role" slot held the first responsibility group
+            extra_resp  = role
+            org  = actual_org
+            role = actual_role
+            # Re-split extra_resp as additional bullets
+            for part in re.split(r'[,;]', extra_resp):
+                part = part.strip().lstrip("•·▸►▪-– ")
+                if part and len(part) > 5:
+                    bullets.insert(0, part)
+            bullets = bullets[:6]
+
         if org or role:
             experience.append({
                 "role":    role,
@@ -1461,6 +1495,15 @@ def parse_cv(text: str) -> dict:
         # or (b) overflow produced strictly more entries.
         if overflow_exp and (_exp_malformed or len(overflow_exp) > len(experience)):
             experience = overflow_exp
+            # When overflow rescue fires on a table-format CV, the "projects" section
+            # typically also contains table artifacts: role names and company names
+            # that were mis-routed there.  Detect by checking if ALL projects have
+            # no bullets AND no description — pure title strings = garbage.
+            if projects and all(
+                not p.get('bullets') and not p.get('description', '').strip()
+                for p in projects
+            ):
+                projects = []
 
     # ── Experience quality guard: detect garbage parses ───────────────────────
     # If most experience entries have date fragments as role names (table-format
