@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lora:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
   <style>
-    @page { size: A4; margin: 0; }
+    @page { size: A4; margin: 0; background: linear-gradient(to right, #243040 222px, #F7F2EA 222px); }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -550,8 +550,8 @@
         height: auto;
         /* Override screen display:flex so float children expand the page correctly */
         display: block !important;
-        /* Dark left column on EVERY page — even after sidebar content ends */
-        background: linear-gradient(to right, #243040 222px, #F7F2EA 222px) !important;
+        /* @page rule above provides the dark sidebar gradient on every page via WeasyPrint */
+        background: transparent !important;
       }
 
       /* Switch from flex to float so content can break across pages */
