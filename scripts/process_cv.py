@@ -795,7 +795,7 @@ def llm_extract_cv(text: str) -> dict | None:
             "- For consulting CVs with Project/Client/Role labels, use 'Role' as the role "
             "and 'Client' as the company.\n"
             "- Include up to 6 bullet points per role (pick the most impactful ones).\n"
-            "- If no summary exists, write one (2 sentences) based on the experience.\n"
+            "- If no summary exists in the CV, leave the summary field as an empty string.\n"
             "- Return ONLY the JSON object — no other text."
         )
 
@@ -1031,40 +1031,6 @@ def parse_cv(text: str) -> dict:
         # Shorten long role titles to a clean summary
         parts = re.split(r"[|,&]", derived)
         header["candidate_title"] = " · ".join(p.strip() for p in parts[:3] if p.strip())[:100]
-
-    # Auto-generate summary if the CV has no summary section but has experience
-    if not summary and experience:
-        # Use Title Case for name and title so they read naturally in a sentence
-        raw_name  = header.get("candidate_name", "") or ""
-        raw_title = header.get("candidate_title", "") or experience[0].get("role", "")
-        name       = raw_name.title() if raw_name else "This candidate"
-        title_tc   = raw_title.title() if raw_title else ""
-        n_roles    = len(experience)
-
-        # Collect unique companies (up to 3)
-        companies  = []
-        for exp in experience:
-            c = exp.get("company", "").strip()
-            if c and c not in companies:
-                companies.append(c)
-        companies = companies[:3]
-
-        # Choose correct article (a / an) based on first sound of the title
-        vowels       = "AEIOUaeiou"
-        article      = "an" if title_tc and title_tc[0] in vowels else "a"
-        title_phrase = f"{article} {title_tc}" if title_tc else "an accomplished professional"
-        roles_phrase = f"{n_roles} roles" if n_roles > 1 else "a key role"
-        company_phrase = (
-            f" at organisations including {', '.join(companies[:-1])} and {companies[-1]}"
-            if len(companies) > 1
-            else (f" at {companies[0]}" if companies else "")
-        )
-        summary = (
-            f"{name} is {title_phrase} with a proven track record across {roles_phrase}"
-            f"{company_phrase}. "
-            f"Their background reflects strong operational capability, attention to detail, "
-            f"and a commitment to excellence in every position held."
-        )
 
     return {
         **header,
