@@ -17,6 +17,9 @@ from datetime import datetime
 
 def fix_char_spacing(text: str) -> str:
     """Fix PDFs where text is extracted as 'J U A N   C A R L O S' → 'JUAN CARLOS'."""
+    # Strip NUL bytes — some PDFs with ligature glyphs (fi, ff) produce \x00
+    # in the extracted text, corrupting words like "financial" → "fi\x00nancial".
+    text = text.replace('\x00', '')
     # Replace Private Use Area characters from Symbol/Wingdings fonts.
     # Common examples: \uf0b7 → bullet, \uf0a7 → bullet, \uf0fc → checkbox.
     # Normalise them all to a standard bullet so downstream parsing works correctly.
@@ -62,7 +65,7 @@ def extract_text(path: str) -> str:
 # ── Section Detection ─────────────────────────────────────────────────────────
 
 SECTION_PATTERNS = {
-    "summary":        r"(?i)^(professional\s+)?summary|profile|about\s+me|objective|overview",
+    "summary":        r"(?i)^(professional\s+)?(summary|profile)|about\s+me|objective|overview|executive\s+summary|career\s+synopsis|career\s+summary|career\s+profile",
     "experience":     r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history|work\s+history",
     "education":      r"(?i)^education|academic|qualification|degree|university|college",
     "skills":         r"(?i)^(core\s+|key\s+|technical\s+|hard\s+|soft\s+)?skills?|competenc|expertise|technologies|tools",
@@ -132,19 +135,82 @@ PHONE_RE    = re.compile(r"[\+]?[\d][\d\s\-().]{7,16}[\d]")
 LINKEDIN_RE = re.compile(r"linkedin\.com/in/[\w\-]+", re.IGNORECASE)
 
 LOCATION_KEYWORDS = [
-    "brazil", "brasil", "remote", "international", "usa", "uk", "canada",
+    "brazil", "brasil", "usa", "uk", "canada",
     "mexico", "colombia", "argentina", "spain", "españa", "madrid", "barcelona",
     "portugal", "chile", "peru", "brasília", "são paulo", "rio de janeiro",
     "distrito federal", "new york", "miami", "california", "london",
+    # Note: "remote" and "international" removed — both appear in job titles
+    # ("Remote sensing", "International Executive Assistant") causing false positives.
 ]
 
 def parse_header(header_text: str) -> dict:
     lines = [l.strip() for l in header_text.splitlines() if l.strip()]
 
-    name     = lines[0] if lines else "Candidate"
+    # ── Extract name ──────────────────────────────────────────────────────────
+    # lines[0] is normally the candidate name.  For multi-column PDFs where
+    # pdfminer collapses everything into one long string, lines[0] can be the
+    # entire CV text (10 000+ chars).  Guard: accept only lines ≤ 60 chars and
+    # that don't start with a digit (dates, section headers) or look like a
+    # section keyword.
+    _NAME_JUNK_RE = re.compile(
+        r'^(curriculum\s+vitae|resume|cv\b|professional\s+(experience|summary|profile)|'
+        r'work\s+experience|education|skills|summary|executive\s+(summary|profile)|'
+        r'career\s+(synopsis|objective|profile|summary)|professional\s+background|'
+        r'strengths?|about\s+me|objective|overview|highlights?|qualifications?)',
+        re.IGNORECASE
+    )
+    name = "Candidate"
+    for line in lines[:5]:   # check first 5 lines only
+        if not line or line[0].isdigit() or _NAME_JUNK_RE.match(line):
+            continue
+        # If the line contains a tab or many consecutive spaces it's probably
+        # name + location on the same line (e.g. "RENE BONOMI   São Paulo").
+        # Extract the part BEFORE the gap — this is the actual name.
+        clean = re.split(r'\s{3,}|\t', line)[0].strip()
+        # Strip credential/qualification suffixes enclosed in brackets:
+        # "Rahul Shah [CA – India, CPA – USA (Awaiting License), LLB]" → "Rahul Shah"
+        clean_no_creds = re.sub(r'\s*[\[\(][^\]\)]*[\]\)].*', '', clean).strip()
+        # Guard on the CLEAN portion (not the full line which may have trailing spaces+location)
+        if len(clean_no_creds) > 60:
+            continue
+        if _NAME_JUNK_RE.match(clean_no_creds):
+            continue
+        # Must look like a real name: 1-5 words, all starting with a letter,
+        # no special chars like brackets or punctuation
+        words = clean_no_creds.split()
+        if (1 <= len(words) <= 5
+                and all(w[0].isalpha() for w in words)
+                and not re.search(r'[(){}\[\]<>@#$%^&*]', clean_no_creds)):
+            name = clean_no_creds
+            break
+    # If we still have "Candidate", fall back to the first ≤50-char non-junk line
+    # that looks like a proper name (1-4 words, alpha-starting, no special chars).
+    if name == "Candidate":
+        for line in lines[:8]:
+            # Also try bracket-stripping on fallback candidates
+            line_stripped = re.sub(r'\s*[\[\(][^\]\)]*[\]\)].*', '', line).strip()
+            if len(line_stripped) > 50 or not line_stripped or _NAME_JUNK_RE.match(line_stripped):
+                continue
+            words = line_stripped.split()
+            if (1 <= len(words) <= 4
+                    and all(w[0].isalpha() for w in words)
+                    and not re.search(r'[(){}\[\]<>@#$%^&*:,.]', line_stripped)):
+                name = line_stripped
+                break
+
     email    = next((EMAIL_RE.search(l).group() for l in lines if EMAIL_RE.search(l)), "")
     phone    = next((PHONE_RE.search(l).group().strip() for l in lines if PHONE_RE.search(l)), "")
     linkedin = next((LINKEDIN_RE.search(l).group() for l in lines if LINKEDIN_RE.search(l)), "")
+
+    # Additional patterns that mark a line as a section heading (not a title)
+    _SECTION_HEADING_RE = re.compile(
+        r'^(personal\s+data|personal\s+information|contact|references?|'
+        r'interests?|hobbies|activities|volunteer|awards?|certific\w*|'
+        r'licens\w*|publications?|languages?|additional\s+information|'
+        r'marital\s+status|birth\s+(date|place)|nationality|citizenship|'
+        r'date\s+of\s+birth|gender|sex\b)',
+        re.IGNORECASE
+    )
 
     # Classify remaining lines as location or title
     location = ""
@@ -156,8 +222,23 @@ def parse_header(header_text: str) -> dict:
         is_location = any(kw in ll for kw in LOCATION_KEYWORDS)
         if is_location and not location:
             location = line
-        elif not title and not is_location and len(line) < 120:
-            title = line
+        elif not title and not is_location and 3 < len(line) < 120:
+            # Reject section headings, sentence fragments (ends with "."), name repetition
+            if _NAME_JUNK_RE.match(line) or _SECTION_HEADING_RE.match(line):
+                continue
+            if line.rstrip().endswith('.') and len(line) > 5:
+                continue  # sentence fragment (e.g. "organizations.", "Inc.")
+            if line.strip() == name:
+                continue  # title is just the name again (e.g. European CV format)
+            # Reject lines starting with non-alphanumeric chars (icons, bullets, etc.)
+            if line and not line[0].isalnum():
+                continue
+            # Reject short lines ending with digits — likely a street address or ZIP code
+            # (e.g. "Xochicalco 295", "03020 Mexico City")
+            if re.search(r'\d+\s*$', line) and len(line) < 40:
+                continue
+            if len(line) > 3:
+                title = line
 
     initials = "".join(w[0].upper() for w in name.split()[:2])
 
@@ -365,11 +446,20 @@ DATE_RANGE_RE = re.compile(
     #   "November 2024 – Present"   "Oct 2023 – Apr 2024"   "2024 – Present"
     #   "2018–2019"                 "11/2023 – 12/2024"     "2012 to 2016"
     #   "Mar 2022 Till Date"        (Indian English consulting format)
+    #   "Feb 2023 ~ Mar 2026"       (tilde separator, Indian-LinkedIn export)
+    #   "09/2019 – actual"          (Spanish/French CVs: "actual" = current)
     r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
     r"\d{4}"
-    r"\s*(?:[-–—]+|to|till)\s*"
+    r"\s*(?:[-–—~]+|to|till)\s*"
     r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
-    r"(?:present|current|now|date|\d{4})",
+    r"(?:present|current|now|date|actual|\d{4})",
+    re.IGNORECASE
+)
+
+# Supplementary: "MM/YYYY  Present" (no dash separator, just whitespace).
+# Some CV formats (e.g. Giuliana) use two spaces between end-date and "Present".
+_SPACE_DATE_RE = re.compile(
+    r'(?:\d{1,2}[/-])?\d{4}\s+(?:present|current|now|actual|date)\b',
     re.IGNORECASE
 )
 
@@ -569,6 +659,12 @@ def parse_experience(exp_text: str) -> list:
 
     lines = [l.rstrip() for l in exp_text.splitlines()]
 
+    # ── Pre-clean: strip duration suffixes appended to date lines ────────────
+    # Some LinkedIn-exported PDFs append "‧3 years 5 months" after the date range.
+    # Remove these so DATE_RANGE_RE can match the clean date.
+    _DURATION_SUFFIX_RE = re.compile(r'[‧·]\s*\d+\s+years?\s+\d*\s*months?.*$', re.IGNORECASE)
+    lines = [_DURATION_SUFFIX_RE.sub('', l) for l in lines]
+
     # ── Format T: multi-column table ─────────────────────────────────────────
     if _looks_like_experience_table(lines):
         table_result = _parse_table_experience(lines)
@@ -588,11 +684,33 @@ def parse_experience(exp_text: str) -> list:
 
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if not stripped or stripped.startswith(BULLET_CHARS):
+        if not stripped:
             continue
 
-        # (a) Direct match on this line
-        m = DATE_RANGE_RE.search(stripped)
+        # ── Special case: bullet-prefixed date boundary (Andrea/European format) ──
+        # Some CVs use "• 02/2023 – actual  Co-Founder at Fintesis" where the
+        # bullet char opens the job entry line, not a responsibility bullet.
+        # Detect: line starts with bullet AND contains a date match AND has
+        # substantial title text after the date (≥ 10 chars).
+        _stripped_no_bullet = stripped.lstrip("•·▸►▪ ")
+        if stripped.startswith(BULLET_CHARS) and _stripped_no_bullet != stripped:
+            _m_bullet_date = DATE_RANGE_RE.search(_stripped_no_bullet)
+            if _m_bullet_date:
+                # Rewrite the line without the bullet prefix so the rest of
+                # the parser sees it as a plain date-boundary line.
+                # Handles both:
+                #   "• 02/2023 – actual  Co-Founder at Fintesis"  (date + role inline)
+                #   "•  09/2019 – 03/2023"                        (date only → Format B forward scan)
+                lines[i] = _stripped_no_bullet
+                stripped  = _stripped_no_bullet
+                is_boundary[i] = True
+                continue
+
+        if stripped.startswith(BULLET_CHARS):
+            continue
+
+        # (a) Direct match on this line (also check space-separated "03/2025  Present")
+        m = DATE_RANGE_RE.search(stripped) or _SPACE_DATE_RE.search(stripped)
         if m:
             is_boundary[i] = True
             continue
@@ -626,7 +744,7 @@ def parse_experience(exp_text: str) -> list:
                 continue
             role, company, period, bullets = blines[0], "", "", []
             for bl in blines[1:]:
-                dm = DATE_RANGE_RE.search(bl)
+                dm = DATE_RANGE_RE.search(bl) or _SPACE_DATE_RE.search(bl)
                 if dm and not period:
                     period = dm.group().strip()
                     candidate = re.sub(DATE_RANGE_RE, "", bl).strip().rstrip("–-|·,").strip()
@@ -643,6 +761,9 @@ def parse_experience(exp_text: str) -> list:
 
     # ── Step 2: Extract role / company / period for each boundary ────────────
     role_records = []
+    # Track globally which lines have been claimed by any boundary's header_indices.
+    # This prevents a forward-scan claim from being re-used by the next boundary's backward scan.
+    _all_claimed: set[int] = set()
 
     def _split_role_company(text: str):
         """
@@ -678,10 +799,11 @@ def parse_experience(exp_text: str) -> list:
             })
             continue
 
-        # Pull period from the date match
-        dm = DATE_RANGE_RE.search(date_str)
+        # Pull period from the date match (also check space-sep "03/2025  Present")
+        dm = DATE_RANGE_RE.search(date_str) or _SPACE_DATE_RE.search(date_str)
         period     = dm.group().strip() if dm else date_str
-        before_date = re.sub(DATE_RANGE_RE, "", date_str).strip().rstrip("–-|·,").strip()
+        _date_strip_re = DATE_RANGE_RE if DATE_RANGE_RE.search(date_str) else _SPACE_DATE_RE
+        before_date = re.sub(_date_strip_re, "", date_str).strip().rstrip("–-|·,").strip()
 
         # Treat pure date-artifact fragments (e.g. "/ 2011", "()", ":", ": ") as empty
         if before_date and re.match(r'^[:/\d\s–\-—()]+$', before_date):
@@ -777,27 +899,94 @@ def parse_experience(exp_text: str) -> list:
                 role    = role_d
                 company = company_d
             else:
-                # ── Format B: look backward for role title 2 lines above ──────
+                # ── Format B: look backward for role title above the date ──────
+                #
+                # First pass: standard backward scan (stop at any bullet/marker).
+                # Handles: ROLE\nCOMPANY\nDATE (classic Format B).
+                #
+                # Second pass (fires only when first pass found nothing, meaning
+                # the date appeared AFTER bullets): skip the entire bullet block
+                # and take the line immediately above the bullets as the role.
+                # Handles: COMPANY\nROLE\n• bullet\n• bullet\nDATE (date-at-end).
+                #
+                # "Ø" is used by some CVs as a company-section marker (like a bullet).
+                # Treat it as a stop character in first-pass backward scans.
+                _EXTRA_STOP = ("Ø",)
+
                 title_candidates = []
                 j = bi - 1
                 while j > prev_bi and len(title_candidates) < 2:
                     s = lines[j].strip()
                     if s:
-                        if s.startswith(BULLET_CHARS):
+                        if s.startswith(BULLET_CHARS) or s.startswith(_EXTRA_STOP):
+                            break
+                        # Reject lines already claimed by a previous forward scan
+                        if j in _all_claimed:
+                            break
+                        # Reject continuation sentences (end with "." / start lowercase)
+                        if s.endswith('.') or (s and s[0].islower()):
                             break
                         title_candidates.insert(0, (j, s))
                     j -= 1
 
+                _bullet_skipped = False
+                if not title_candidates:
+                    # Second pass: skip bullet block to find role above it
+                    j = bi - 1
+                    while j > prev_bi and not lines[j].strip():
+                        j -= 1
+                    # Skip consecutive bullet lines
+                    skipped = 0
+                    while j > prev_bi and lines[j].strip().startswith(BULLET_CHARS):
+                        j -= 1
+                        skipped += 1
+                    if skipped > 0:  # bullets were present
+                        while j > prev_bi and not lines[j].strip():
+                            j -= 1
+                        if j > prev_bi:
+                            s = lines[j].strip()
+                            if (s
+                                    and not s.startswith(BULLET_CHARS)
+                                    and not s.startswith(_EXTRA_STOP)
+                                    and not s.endswith('.')
+                                    and not (s and s[0].islower())
+                                    and j not in _all_claimed
+                                    and not (DATE_RANGE_RE.search(s) and len(s) < 40)):
+                                title_candidates = [(j, s)]
+                                _bullet_skipped = True
+
                 if len(title_candidates) >= 2:
                     role    = title_candidates[-2][1].rstrip("–-|·,").strip()
                     company = title_candidates[-1][1].strip()
-                    header_indices.update({title_candidates[-2][0], title_candidates[-1][0]})
+                    new_idx = {title_candidates[-2][0], title_candidates[-1][0]}
+                    header_indices.update(new_idx)
+                    _all_claimed.update(new_idx)
                 elif title_candidates:
                     role    = title_candidates[-1][1].rstrip("–-|·,").strip()
                     company = ""
                     header_indices.add(title_candidates[-1][0])
+                    _all_claimed.add(title_candidates[-1][0])
                 else:
-                    role    = ""
+                    # ── Format B-forward: role appears on next line(s) after date ──
+                    # (e.g. "• DATE\nROLE TITLE" pattern in European CVs)
+                    role = ""
+                    for fwd in range(bi + 1, min(bi + 4, _next_search_end)):
+                        s = lines[fwd].strip()
+                        if not s:
+                            continue
+                        if s.startswith(BULLET_CHARS) or s.startswith(_EXTRA_STOP):
+                            break
+                        if DATE_RANGE_RE.search(s):
+                            break
+                        # Reject sentence fragments
+                        if s.endswith('.') or (s and s[0].islower()):
+                            continue
+                        # Accept as role: short-ish, no location keyword
+                        if len(s) < 80 and not any(kw in s.lower() for kw in LOCATION_KEYWORDS):
+                            role = s.rstrip("–-|·, ")
+                            header_indices.add(fwd)
+                            _all_claimed.add(fwd)  # mark globally so backward scans skip it
+                            break
                     company = ""
 
         role_records.append({
@@ -1470,13 +1659,25 @@ def parse_cv(text: str) -> dict:
                          r'automotive/consumer|automotive/mfg)', s, re.IGNORECASE) and len(s) < 30:
                 continue
 
-            # Check for "ORG as ROLE" boundary
+            # Check for "ORG as ROLE" boundary (e.g. "Cyient Ltd as Engineer")
             m_ar = re.match(r'^(.+?)\s+as\s+(.+)$', s, re.IGNORECASE)
             if m_ar and not s.startswith(tuple(BULLET_CHARS_SET)):
                 potential_org  = m_ar.group(1).strip()
                 potential_role = m_ar.group(2).strip()
-                # Sanity: both sides should be reasonably short
-                if len(potential_org) < 80 and len(potential_role) < 60:
+                # Sanity: both sides must look like a real "Company as Job Title" pair.
+                # Rejects narrative uses of "as": "well as US & Canada" (org=sentence fragment),
+                # "Poland, Germany as well as US" (org=list of places), etc.
+                _role_lower = potential_role.strip().lower()
+                _org_lower  = potential_org.strip().lower()
+                if (len(potential_org) < 80 and len(potential_role) < 60
+                        and len(potential_org) > 2   # not a 1-2 char pronoun ("I", "He")
+                        and potential_org[0].isupper()
+                        # Reject "X as well as Y" — role starts with "well"/"also"/"too"
+                        and not _role_lower.startswith(('well ', 'also ', 'too ', 'such '))
+                        # Reject org with multiple commas (list of countries/places)
+                        and potential_org.count(',') < 2
+                        # Reject org that contains conjunctions or prepositions
+                        and not re.search(r'\b(and|or|but|for|from|with|within)\b', _org_lower)):
                     _flush_overflow_entry()
                     cur_org  = potential_org
                     cur_role = potential_role
@@ -1623,7 +1824,13 @@ def main():
     print(f"   Awards:         {len(data['awards'])}")
 
     # 3. Build output filename
-    safe_name   = re.sub(r"[^\w\s-]", "", data["candidate_name"]).strip()
+    safe_name = re.sub(r"[^\w\s-]", "", data["candidate_name"]).strip()
+    # Guard: macOS limits filenames to 255 bytes. Multi-column PDFs sometimes
+    # collapse all text into one line, making candidate_name 10 000+ chars.
+    # Truncate to 80 chars; if still blank after cleanup, use "Unknown Candidate".
+    safe_name = safe_name[:80].strip()
+    if not safe_name or safe_name.lower() in ("candidate", "curriculum vitae", "resume", "cv"):
+        safe_name = "Unknown Candidate"
     pdf_filename = f"{safe_name} - CV Simpalm Staffing.pdf"
     output_path  = Path(__file__).parent.parent / "processed" / pdf_filename
 
