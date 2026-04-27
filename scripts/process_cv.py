@@ -33,19 +33,73 @@ def fix_char_spacing(text: str) -> str:
         # Detect spaced-char pattern: >= 60% of tokens are single characters
         single_chars = sum(1 for t in tokens if len(t) == 1 and t.isalpha())
         if len(tokens) >= 6 and single_chars / len(tokens) >= 0.6:
-            # Collapse: group single chars into words separated by 2+ spaces
-            collapsed = re.sub(r'(?<=\w) (?=\w)', '', stripped)
-            # Restore word breaks (2+ spaces become single space)
-            collapsed = re.sub(r'  +', ' ', collapsed)
+            alpha_tokens = [t for t in tokens if t and t.isalpha()]
+            if all(t.isupper() for t in alpha_tokens):
+                # ALL-CAPS spaced: "J U A N   C A R L O S" → "JUAN CARLOS"
+                collapsed = re.sub(r'(?<=\w) (?=\w)', '', stripped)
+                collapsed = re.sub(r'  +', ' ', collapsed)
+            else:
+                # Mixed-case spaced: "S a u n d a r y a M i s h r a" → "Saundarya Mishra"
+                # Uppercase letter starts a new word, empty token = explicit word break
+                result = []
+                current = []
+                for t in tokens:
+                    if not t:  # empty string from multiple consecutive spaces
+                        if current:
+                            result.append(''.join(current))
+                            current = []
+                    elif t.isupper() and len(t) == 1 and current:
+                        result.append(''.join(current))
+                        current = [t]
+                    else:
+                        current.append(t)
+                if current:
+                    result.append(''.join(current))
+                collapsed = ' '.join(r for r in result if r)
             fixed.append(collapsed)
         else:
             fixed.append(line)
     return '\n'.join(fixed)
 
+def _extract_with_pdfplumber(path: str) -> str:
+    """Fallback PDF extractor using pdfplumber (better for multi-column layouts)."""
+    try:
+        import pdfplumber
+        parts = []
+        with pdfplumber.open(path) as pdf:
+            for page in pdf.pages:
+                t = page.extract_text(x_tolerance=2, y_tolerance=3)
+                if t:
+                    parts.append(t)
+        return '\n'.join(parts)
+    except Exception:
+        return ""
+
+# Strip sidebar inline-prefix labels that pdfplumber merges onto content lines.
+# Example: "Phone Associate Manager" → "Associate Manager"
+_INLINE_SIDEBAR_PREFIX_RE = re.compile(
+    r'^(phone|email|address|linkedin|github|website|portfolio|contact)\s+',
+    re.IGNORECASE,
+)
+
 def extract_text_pdf(path: str) -> str:
     from pdfminer.high_level import extract_text
     raw = extract_text(path)
-    return fix_char_spacing(raw)
+    fixed = fix_char_spacing(raw)
+    # Detect single-blob extraction: pdfminer collapsed all text into 1–2 giant lines.
+    # This happens with multi-column PDFs where pdfminer can't separate the columns.
+    # Fall back to pdfplumber which handles these layouts correctly.
+    nonempty = [l for l in fixed.split('\n') if l.strip()]
+    if nonempty and len(nonempty) <= 2 and len(nonempty[0]) > 800:
+        plumber_raw = _extract_with_pdfplumber(path)
+        if plumber_raw:
+            # Strip inline sidebar prefixes that pdfplumber merges into content lines
+            cleaned_lines = []
+            for line in plumber_raw.splitlines():
+                cleaned_lines.append(_INLINE_SIDEBAR_PREFIX_RE.sub('', line))
+            plumber_raw = '\n'.join(cleaned_lines)
+            return fix_char_spacing(plumber_raw)
+    return fixed
 
 def extract_text_docx(path: str) -> str:
     from docx import Document
@@ -120,9 +174,24 @@ def split_sections(text: str) -> dict:
                     and stripped == stripped.upper()
                     and re.search(r'[A-Z]', stripped)
                     and current not in ("_header",)):
-                # Stash unrecognised heading content into _overflow
-                current = "_overflow"
-                sections[current].append(line)
+                # Only route to _overflow when the ALL-CAPS text looks like a table
+                # column header (ORGANIZATION, DESIGNATION, etc.) or when we are NOT
+                # in the experience section.  Plain company names in ALL-CAPS like
+                # "ULTRAHUMAN" or "DREAM ON ME" must stay in experience so they are
+                # available for boundary-based role extraction.
+                _TABLE_COLUMN_WORDS = {
+                    'organization', 'designation', 'employer', 'duration',
+                    'project', 'client', 'role', 'responsibilities',
+                    'domain', 'methodology', 'environment',
+                }
+                _is_table_col = any(w in stripped.lower() for w in _TABLE_COLUMN_WORDS)
+                if current == "experience" and not _is_table_col:
+                    # Keep inside experience — it's a company name, not a table header
+                    sections[current].append(line)
+                else:
+                    # Stash unrecognised heading content into _overflow
+                    current = "_overflow"
+                    sections[current].append(line)
             else:
                 sections[current].append(line)
 
@@ -711,12 +780,30 @@ def parse_experience(exp_text: str) -> list:
 
         # (a) Direct match on this line (also check space-separated "03/2025  Present")
         m = DATE_RANGE_RE.search(stripped) or _SPACE_DATE_RE.search(stripped)
+        _m_paren_enclosed = False   # True when DATE_RANGE_RE match is inside ()
         if m:
-            is_boundary[i] = True
-            continue
+            # Skip dates that are entirely inside parentheses — these are sidebar
+            # education location entries like "Santa Fe, Argentina (2010-2013)" that
+            # pdfplumber interleaves into the experience text in multi-column PDFs.
+            _ms, _me = m.start(), m.end()
+            _before_paren = stripped[:_ms].rstrip()
+            _after_paren  = stripped[_me:].lstrip()
+            if _before_paren.endswith('(') and _after_paren.startswith(')'):
+                # Date is inside parentheses — NOT a boundary by itself.
+                # Do NOT `continue` here: fall through so the Format C (PAREN_YEAR_RE)
+                # check below can still fire.  Example: a line ending with "(2022)"
+                # that ALSO contains "(2018–2019)" in its body text should be caught
+                # as a Format C boundary via the trailing "(2022)".
+                _m_paren_enclosed = True
+            else:
+                is_boundary[i] = True
+                continue
 
-        # (b) Merge with next line — ONLY mark if match starts within stripped
-        if i + 1 < len(lines):
+        # (b) Merge with next line — ONLY mark if match starts within stripped.
+        # Skip when date is already identified as paren-enclosed: the merged
+        # string would still find the same paren-enclosed date first, triggering
+        # a false positive (e.g. "Santa Fe, Argentina (2010-2013)" + next line).
+        if not _m_paren_enclosed and i + 1 < len(lines):
             nxt = lines[i + 1].strip()
             if nxt and not nxt.startswith(BULLET_CHARS):
                 merged = stripped + " " + nxt
@@ -729,10 +816,32 @@ def parse_experience(exp_text: str) -> list:
         # (c) Format C: line ends with (YYYY) or (YYYY–YYYY)
         pm = PAREN_YEAR_RE.search(stripped)
         if pm:
-            yr_start = pm.group(1)
-            yr_end   = pm.group(2) or ""
-            paren_year[i] = f"{yr_start}–{yr_end}" if yr_end else yr_start
-            is_boundary[i] = True
+            _lower_stripped = stripped.lower()
+            # Reject cert/education sidebar entries interleaved by pdfplumber:
+            # "Talent Acquisition Certificate - Edutin Academy (2025)"
+            _CERT_EDU_WORDS = {
+                'certificate', 'certification', 'academy', 'training', 'course',
+                'diploma', 'institute', 'college', 'school', 'university',
+            }
+            # Reject pure location-entry lines like "Santa Fe, Argentina (2010-2013)".
+            # These are sidebar education locations that pdfplumber mixes into the
+            # experience text.  Signature: ≤4 words before the paren and NO role
+            # indicators (em-dash, slash) that would signal a job description.
+            _before_pm = stripped[:pm.start()].strip().rstrip(',')
+            _bw_count  = len(_before_pm.replace(',', ' ').split())
+            _looks_like_location = (
+                _bw_count < 4   # "Santa Fe, Argentina" = 3 words → location
+                                 # "Office Manager, Visas USA" = 4 words → keep
+                and '–' not in _before_pm
+                and '/' not in _before_pm
+                and not any(w in _before_pm.lower() for w in _CERT_EDU_WORDS)
+            )
+            if (not _looks_like_location
+                    and not any(w in _lower_stripped for w in _CERT_EDU_WORDS)):
+                yr_start = pm.group(1)
+                yr_end   = pm.group(2) or ""
+                paren_year[i] = f"{yr_start}–{yr_end}" if yr_end else yr_start
+                is_boundary[i] = True
 
     boundary_indices = [i for i, b in enumerate(is_boundary) if b]
 
@@ -765,14 +874,31 @@ def parse_experience(exp_text: str) -> list:
     # This prevents a forward-scan claim from being re-used by the next boundary's backward scan.
     _all_claimed: set[int] = set()
 
+    # Modifiers that signal a work location (remote / hybrid / on-site), not part of the role title.
+    _LOCATION_MODIFIERS = {'remote', 'hybrid', 'onsite', 'on-site', 'in-office', 'presencial'}
+
     def _split_role_company(text: str):
         """
-        Split 'Role Title, Company Name' into (role, company).
-        Only splits if the suffix after the LAST comma is a plausible company
-        name: short (≤ 50 chars) and contains no ' & ' (which signals a list
-        of specialisations, not a company name).
-        Returns (text, "") if no clean split is found.
+        Split a role+company string into (role, company).
+
+        Handles two separator styles:
+        1. Pipe: "Company | Location Role" or "Company | Location Role | extra"
+           — used by Diego-style CVs where company precedes the role on the same line.
+        2. Comma: "Role Title, Company Name"
+           — classic format; only splits on the LAST comma.
+        Returns (text, "") when no clean split is found.
         """
+        if '|' in text:
+            parts = [p.strip() for p in text.split('|')]
+            if len(parts) >= 2:
+                company = parts[0].strip()
+                role = parts[-1].strip()
+                # Strip leading work-location modifier from role
+                role_words = role.split()
+                if role_words and role_words[0].lower() in _LOCATION_MODIFIERS:
+                    role = ' '.join(role_words[1:])
+                if role and company:
+                    return role, company
         parts = text.rsplit(", ", 1)
         if len(parts) == 2:
             suffix = parts[1].strip()
@@ -913,6 +1039,19 @@ def parse_experience(exp_text: str) -> list:
                 # Treat it as a stop character in first-pass backward scans.
                 _EXTRA_STOP = ("Ø",)
 
+                # Sidebar section headings that pdfplumber interleaves into experience text.
+                # When encountered going backward, stop — we've left the role/company block.
+                _SIDEBAR_LABEL_RE = re.compile(
+                    r'^(contact|phone|email|address|location|education|skills|tools'
+                    r'|languages?|certifications?|awards?|achievements?|interests?'
+                    r'|hobbies|references?|linkedin|github|portfolio|website|summary'
+                    r'|profile|objective)\s*$',
+                    re.IGNORECASE,
+                )
+                # Lines with parenthesised year ranges are sidebar education entries.
+                # Skip (not stop) — the real role/company may be above them.
+                _PAREN_YEAR_RE_SCAN = re.compile(r'\(\s*\d{4}[-–]?\d{0,4}\s*\)')
+
                 title_candidates = []
                 j = bi - 1
                 while j > prev_bi and len(title_candidates) < 2:
@@ -926,6 +1065,38 @@ def parse_experience(exp_text: str) -> list:
                         # Reject continuation sentences (end with "." / start lowercase)
                         if s.endswith('.') or (s and s[0].islower()):
                             break
+                        # Stop at sidebar section headings (pdfplumber interleaving)
+                        if _SIDEBAR_LABEL_RE.match(s):
+                            break
+                        # Skip sidebar education entries like "Santa Fe, Argentina (2010-2013)"
+                        if _PAREN_YEAR_RE_SCAN.search(s):
+                            j -= 1
+                            continue
+                        # Skip education institution name lines like "Eduardo Lafferriere Institute"
+                        # that pdfplumber interleaves between real role/company lines.
+                        # Detect: short line ending with an institution suffix word.
+                        _EDU_INST_SUFFIX_RE = re.compile(
+                            r'\b(institute|college|university|school|academy'
+                            r'|polytechnic|institution|foundation)\s*$',
+                            re.IGNORECASE,
+                        )
+                        if _EDU_INST_SUFFIX_RE.search(s) and len(s) < 70:
+                            j -= 1
+                            continue
+                        # Skip degree-title lines like "BA in English Teaching",
+                        # "MSc Computer Science", "Business Administration Diploma"
+                        _DEGREE_PREFIX_RE = re.compile(
+                            r'^(B\.?A\.?|B\.?S\.?|M\.?A\.?|M\.?S\.?|M\.?B\.?A\.?'
+                            r'|Ph\.?D\.?|Lic\.|Ing\.|Dr\.|Esp\.|Post[- ]?grad\b)',
+                            re.IGNORECASE,
+                        )
+                        _DEGREE_SUFFIX_RE = re.compile(
+                            r'\b(diploma|certificate|degree)\s*$',
+                            re.IGNORECASE,
+                        )
+                        if (_DEGREE_PREFIX_RE.match(s) or _DEGREE_SUFFIX_RE.search(s)) and len(s) < 70:
+                            j -= 1
+                            continue
                         title_candidates.insert(0, (j, s))
                     j -= 1
 
@@ -967,27 +1138,55 @@ def parse_experience(exp_text: str) -> list:
                     header_indices.add(title_candidates[-1][0])
                     _all_claimed.add(title_candidates[-1][0])
                 else:
-                    # ── Format B-forward: role appears on next line(s) after date ──
-                    # (e.g. "• DATE\nROLE TITLE" pattern in European CVs)
-                    role = ""
-                    for fwd in range(bi + 1, min(bi + 4, _next_search_end)):
+                    # ── Format B-forward: role (and company) appear after the date ──
+                    # Handles two sub-patterns:
+                    #   • "• DATE\nROLE TITLE" (Andrea / European CVs)
+                    #   • "DATE\nCOMPANY\nROLE" (Saundarya — date-before-company)
+                    # Collect up to 2 non-bullet, non-date, title-case lines.
+                    fwd_candidates = []
+                    for fwd in range(bi + 1, min(bi + 6, _next_search_end)):
                         s = lines[fwd].strip()
                         if not s:
                             continue
                         if s.startswith(BULLET_CHARS) or s.startswith(_EXTRA_STOP):
                             break
-                        if DATE_RANGE_RE.search(s):
+                        if DATE_RANGE_RE.search(s) or _SPACE_DATE_RE.search(s):
                             break
+                        # Skip sidebar labels that pdfplumber interleaves
+                        if _SIDEBAR_LABEL_RE.match(s):
+                            continue
+                        # Skip parenthesised year sidebar edu entries
+                        if _PAREN_YEAR_RE_SCAN.search(s):
+                            continue
                         # Reject sentence fragments
                         if s.endswith('.') or (s and s[0].islower()):
                             continue
-                        # Accept as role: short-ish, no location keyword
                         if len(s) < 80 and not any(kw in s.lower() for kw in LOCATION_KEYWORDS):
-                            role = s.rstrip("–-|·, ")
-                            header_indices.add(fwd)
-                            _all_claimed.add(fwd)  # mark globally so backward scans skip it
-                            break
-                    company = ""
+                            fwd_candidates.append((fwd, s))
+                            _all_claimed.add(fwd)
+                            if len(fwd_candidates) >= 2:
+                                break
+
+                    if len(fwd_candidates) >= 2:
+                        first_text  = fwd_candidates[0][1]
+                        second_text = fwd_candidates[1][1]
+                        # Heuristic: if the first forward line is ALL-CAPS it's a company
+                        # name (brand), and the second is the role title. Otherwise the
+                        # first is the role.  E.g. "ULTRAHUMAN\nAssociate Manager".
+                        if first_text.isupper():
+                            role    = second_text.rstrip("–-|·, ")
+                            company = first_text
+                        else:
+                            role    = first_text.rstrip("–-|·, ")
+                            company = second_text
+                        header_indices.update(fc[0] for fc in fwd_candidates)
+                    elif fwd_candidates:
+                        role    = fwd_candidates[0][1].rstrip("–-|·, ")
+                        company = ""
+                        header_indices.add(fwd_candidates[0][0])
+                    else:
+                        role    = ""
+                        company = ""
 
         role_records.append({
             "role": role, "company": company, "period": period,

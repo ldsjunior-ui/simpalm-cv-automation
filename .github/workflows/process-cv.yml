@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'inbox/**'
+      - 'scripts/process_cv.py'   # parser fix → reprocess all
+  workflow_dispatch:              # manual trigger (always reprocesses all)
 
 # Serialize all CV-processing runs — prevents concurrent push conflicts
 concurrency:
@@ -56,14 +58,23 @@ jobs:
           # Pull latest state first — queued runs need the current HEAD
           git pull --rebase origin main 2>/dev/null || true
 
-          # Files changed in the triggering push
-          git diff --name-only HEAD~1 HEAD -- 'inbox/**' \
-            | grep -E '\.(pdf|docx|doc)$' > /tmp/new_cvs.txt || true
-
-          # Fallback: if diff is empty, collect all inbox PDFs/DOCXs
-          if [ ! -s /tmp/new_cvs.txt ]; then
+          # If process_cv.py changed (parser update) OR manual dispatch → reprocess ALL
+          PARSER_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c 'scripts/process_cv.py' || echo 0)
+          MANUAL_DISPATCH=${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
+          if [ "$PARSER_CHANGED" -gt 0 ] || [ "$MANUAL_DISPATCH" = "true" ]; then
+            echo "Parser changed or manual dispatch — reprocessing ALL inbox CVs"
             find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
               | sort > /tmp/new_cvs.txt || true
+          else
+            # Files changed in the triggering push
+            git diff --name-only HEAD~1 HEAD -- 'inbox/**' \
+              | grep -E '\.(pdf|docx|doc)$' > /tmp/new_cvs.txt || true
+
+            # Fallback: if diff is empty, collect all inbox PDFs/DOCXs
+            if [ ! -s /tmp/new_cvs.txt ]; then
+              find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
+                | sort > /tmp/new_cvs.txt || true
+            fi
           fi
 
           echo "Files to process:"
