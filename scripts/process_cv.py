@@ -1237,7 +1237,67 @@ def parse_experience(exp_text: str) -> list:
                 continue
             bullet = s.lstrip("•·▸►▪-– ").strip()
             if bullet and len(bullet) > 8:
-                bullets.append(bullet)
+                # Skip wrapped location fragments, e.g. "from Hyderabad)."
+                # These are the tail of a long role-header line that wrapped.
+                if (re.match(r'^(from|based\s+in|remote\s+from|located\s+in|working\s+from)\b',
+                             bullet, re.IGNORECASE)
+                        and ')' in bullet and len(bullet) < 60):
+                    continue
+                # Skip company-name suffix fragments (tail of a wrapped role-header
+                # line), e.g. "Limited, Dublin" wrapping from "MyComplianceOffice\n
+                # Limited, Dublin" where the backward-scan only picked up the first line.
+                if (re.match(
+                        r'^(Ltd\.?|Limited|Inc\.?|Corp\.?|GmbH|S\.?A\.?|PLC|LLC|'
+                        r'B\.?V\.?|Ireland\s+Ltd\.?|Ireland\s+Limited)\b',
+                        bullet, re.IGNORECASE)
+                        and len(bullet) < 60):
+                    continue
+
+                # Continuation detection — two cases where a non-bulleted line is
+                # a wrapped continuation of the previous bullet, not a new bullet:
+                #
+                # Case A: starts with lowercase → always a wrap (e.g. "engineering team.")
+                # Case B: previous bullet ended WITHOUT sentence-closing punctuation
+                #         AND this line is SHORT (< 30 chars) — a wrapped noun fragment
+                #         (e.g. "…to deliver an Enterprise\nGrade Product." → 13 chars)
+                #         Long lines (≥ 30 chars) without prefix are likely new thoughts.
+                _is_wrap = (
+                    bullets
+                    and not s.startswith(tuple(BULLET_CHARS))
+                    and bullet
+                    and (
+                        bullet[0].islower()                              # Case A
+                        or (bullets[-1][-1] not in '.!?:'               # Case B
+                            and len(bullet) < 30)
+                    )
+                )
+                if _is_wrap:
+                    bullets[-1] = bullets[-1].rstrip() + " " + bullet
+                else:
+                    bullets.append(bullet)
+
+        # ── Merge dangling continuation bullets ───────────────────────────────
+        # Lines like "Leading the teams and" end mid-sentence; the next line is
+        # the logical continuation.  Merge them so bullets stay coherent.
+        _DANGLING_END_RE = re.compile(
+            r'\b(and|or|to|of|the|with|for|in|a|an|that|which|by|from|on|at|as|'
+            r'is|are|be|been|being|its|their|our|this|these|those|both|either|'
+            r'neither|within|across|between|through|into|including|excluding|'
+            r'such|where|when|while|how|why|what|any|all|each|every|some|no|'
+            r'not|only|also|but|yet|so|then|than|more|most|less|least|very|'
+            r'too|quite|rather|further|upon|per|over|under)\s*$',
+            re.IGNORECASE
+        )
+        merged_bullets: list[str] = []
+        bi2 = 0
+        while bi2 < len(bullets):
+            b = bullets[bi2]
+            while bi2 + 1 < len(bullets) and _DANGLING_END_RE.search(b):
+                bi2 += 1
+                b = b.rstrip() + " " + bullets[bi2].lstrip()
+            merged_bullets.append(b.strip())
+            bi2 += 1
+        bullets = merged_bullets
 
         clean_role = rec["role"].strip().rstrip("–-|·, ").strip()
         # Skip entries that look like education — they belong in the education section.
@@ -1730,7 +1790,34 @@ def parse_cv(text: str) -> dict:
     # A summary is a flowing paragraph — bullet chars should never appear in it.
     summary = re.sub(r'^[•\s]+', '', summary)          # strip leading bullets/spaces
     summary = re.sub(r'[•]+', ' ', summary)            # replace any remaining bullets with space
+    summary = re.sub(r'\n+', ' ', summary)              # collapse inline newlines
     summary = re.sub(r'  +', ' ', summary).strip()     # normalise multiple spaces
+
+    # ── Summary length guard ─────────────────────────────────────────────────
+    # Candidates sometimes paste their entire "About" or 10+ bullet summary
+    # verbatim into the CV.  Truncate to the first 2 sentences / ≤80 words so
+    # the Professional Summary box on the PDF stays scannable for recruiters.
+    _SENT_SPLIT_RE = re.compile(r'(?<=[.!?])\s+(?=[A-ZÀ-ɏ])')
+    # Also split on double-newlines (bullet-style summary paragraphs)
+    _summary_raw_parts = re.split(r'\n{2,}', summary)
+    # Flatten into sentences
+    _summary_sentences: list[str] = []
+    for part in _summary_raw_parts:
+        part = part.strip()
+        if part:
+            _summary_sentences.extend(_SENT_SPLIT_RE.split(part))
+    if len(summary.split()) > 80 or len(_summary_sentences) > 3:
+        kept: list[str] = []
+        wcount = 0
+        for sent in _summary_sentences:
+            wc = len(sent.split())
+            if wcount + wc > 80 and kept:
+                break
+            kept.append(sent)
+            wcount += wc
+        summary = " ".join(kept).strip()
+        if summary and summary[-1] not in ".!?":
+            summary = summary.rstrip() + "."
 
     # ── Tech-skills rescue: "Languages" section containing programming/tool names ──
     # Some CVs (e.g. Indian consulting CVs) list tech tools under a heading called
