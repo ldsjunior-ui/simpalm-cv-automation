@@ -920,14 +920,6 @@
     "source_file": "inbox/rosa carmelina gomez leon.pdf"
   },
   {
-    "name": "Candidate",
-    "title": "ly",
-    "location": "",
-    "filename": "Unknown Candidate - CV Simpalm Staffing.pdf",
-    "processed": "2026-04-28T15:20:55Z",
-    "source_file": "inbox/sarahi.pdf"
-  },
-  {
     "name": "HARIKA UPPALA",
     "title": "Finance  Manager",
     "location": "",
@@ -942,5 +934,13 @@
     "filename": "Sravya Kakarla - CV Simpalm Staffing.pdf",
     "processed": "2026-04-28T15:26:04Z",
     "source_file": "inbox/Sravya.docx"
+  },
+  {
+    "name": "Candidate",
+    "title": "Technical Proficiencies: Power BI, Google Suite, R Studio, Bloomberg, QuickBooks, SAGE50, Wix Pro, Canva, Meta",
+    "location": "William Paterson University, Controller’s Office | Wayne, NJ, USA",
+    "filename": "Unknown Candidate - CV Simpalm Staffing.pdf",
+    "processed": "2026-04-28T15:34:26Z",
+    "source_file": "inbox/Luz_Cusi.docx"
   }
 ]
