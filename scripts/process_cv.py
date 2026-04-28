@@ -119,10 +119,10 @@ def extract_text(path: str) -> str:
 # ── Section Detection ─────────────────────────────────────────────────────────
 
 SECTION_PATTERNS = {
-    "summary":        r"(?i)^(professional\s+)?(summary|profile)|about\s+me|objective|overview|executive\s+summary|career\s+synopsis|career\s+summary|career\s+profile",
+    "summary":        r"(?i)^(professional\s+)?(summary|profile)|about\s+me|objective|overview|executive\s+summary|career\s+synopsis|career\s+summary|career\s+profile|aims?\s*[&e]?\s*goals?|personal\s+statement",
     "experience":     r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history|work\s+history",
     "education":      r"(?i)^education|academic|qualification|degree|university|college",
-    "skills":         r"(?i)^(core\s+|key\s+|technical\s+|hard\s+|soft\s+)?skills?|competenc|expertise|technologies|tools",
+    "skills":         r"(?i)^(\w+\s+)?(skills?|abilities|competenc\w*)|expertise|technologies|tools",
     "languages":      r"(?i)^languages?",
     "certifications": r"(?i)^(?:certific\w*|licens\w*|accredit\w*|credential\w*)",
     "projects":       r"(?i)^projects?|portfolio|key\s+projects?",
@@ -145,15 +145,28 @@ def split_sections(text: str) -> dict:
         for section, pattern in SECTION_PATTERNS.items():
             # Guard 1: true section headings are short (≤ 60 chars).
             # Prevents "Experience in setting up Azure Data Factory..." from matching.
+            # Exception: "HEADING | inline content" — the "|" separator indicates the
+            # content is inline on the same line (e.g. "LANGUAGES | Portuguese – native").
+            # In that case check only the heading-keyword length, not the total line.
             m_sec = re.match(pattern, stripped)
-            if not m_sec or len(stripped) > 60:
+            if not m_sec:
+                continue
+            _heading_end = m_sec.end()
+            _after_heading = stripped[_heading_end:].lstrip()
+            _has_pipe_content = _after_heading.startswith('|')
+            if len(stripped) > 60 and not _has_pipe_content:
                 continue
             # Guard 2: reject label lines like "Project: Enterprise Commerce Volume License"
-            # where the keyword is immediately followed by ": content".
-            # True headings are never "Keyword: some long value".
+            # where the keyword is immediately followed by ": long content".
+            # True headings end with a bare ":" (no content) or have no colon at all.
+            # Allow "Computer skills:" (colon + nothing) — that IS a heading.
             remaining_after_kw = stripped[m_sec.end():].lstrip()
             if remaining_after_kw.startswith(":"):
-                continue
+                # Only reject when there is actual content after the colon
+                _colon_body = remaining_after_kw.lstrip(":").strip()
+                if _colon_body:          # "Keyword: value" → label, skip
+                    continue
+                # else: "Keyword:" alone → genuine section heading, fall through
             # Guard 3: reject sentence continuations like "Experience with ticketing…"
             # or "Experience in setting up…". A true heading never starts with these
             # relational prepositions immediately after the section keyword.
@@ -162,9 +175,14 @@ def split_sections(text: str) -> dict:
                 continue
             current = section
             matched = True
-            # If the header line also contains content (e.g. "SKILLS • foo • bar"),
-            # keep the part after the first word/symbol as section content
-            after = re.sub(pattern, "", stripped, count=1, flags=re.IGNORECASE).lstrip(" :–-•·▸►▪")
+            # If the header line also contains content (e.g. "SKILLS • foo • bar"
+            # or "LANGUAGES | Portuguese – native"), capture the inline body.
+            if _has_pipe_content:
+                # Pipe-separated: "HEADING | content" → take everything after "|"
+                after = _after_heading.lstrip('| ').strip()
+            else:
+                after = re.sub(pattern, "", stripped, count=1,
+                               flags=re.IGNORECASE).lstrip(" :–-•·▸►▪")
             if after:
                 sections[current].append(after)
             break
@@ -349,7 +367,9 @@ def parse_skills(skills_text: str) -> list:
     skills = []
     seen = set()
     for s in raw:
-        s = s.strip().strip("–-•·▸►▪").rstrip('.')
+        # Strip leading/trailing whitespace, then common bullet/dash chars
+        # including ● (U+25CF) and ○ (U+25CB) which are not in the ASCII bullet set.
+        s = s.strip().strip("–-•·▸►▪●○◆◇▶▷").strip().rstrip('.')
         sl = s.lower()
         # Reject: empty, too short/long, generic labels, punctuation-only
         if not s or not (2 < len(s) < 45):
@@ -370,6 +390,15 @@ def parse_skills(skills_text: str) -> list:
             continue
         # Reject truncated items ending with "&" or "–" or "/"
         if s[-1] in ('&', '–', '/', '\\'):
+            continue
+        # Reject language-name headers ("Spanish:", "English:") that end with ":"
+        # These come from Skills sections that actually contain language info.
+        if s.endswith(':'):
+            continue
+        # Reject metric/KPI statements masquerading as skills.
+        # e.g. "Collected an average of 100 calls per agent per day"
+        if re.search(r'\b(an average|per agent|per day|per week|per month|per year'
+                     r'|\d+\s*%|\d+\s*calls|\d+\s*tickets|\d+\s*clients)\b', s, re.IGNORECASE):
             continue
         skills.append(s)
         seen.add(sl)
@@ -517,18 +546,20 @@ DATE_RANGE_RE = re.compile(
     #   "Mar 2022 Till Date"        (Indian English consulting format)
     #   "Feb 2023 ~ Mar 2026"       (tilde separator, Indian-LinkedIn export)
     #   "09/2019 – actual"          (Spanish/French CVs: "actual" = current)
-    r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
+    #   "May/2023 – today"          (Brazilian format: month/year with slash)
+    #   "Jun/2023-Aug/2024"         (Brazilian: month/year range, slash separator)
+    r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?[\s/]+))?"
     r"\d{4}"
     r"\s*(?:[-–—~]+|to|till)\s*"
-    r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?\s+))?"
-    r"(?:present|current|now|date|actual|\d{4})",
+    r"(?:(?:\d{1,2}/)|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\w]*\.?[\s/]+))?"
+    r"(?:present|current|now|date|actual|today|hoje|\d{4})",
     re.IGNORECASE
 )
 
 # Supplementary: "MM/YYYY  Present" (no dash separator, just whitespace).
 # Some CV formats (e.g. Giuliana) use two spaces between end-date and "Present".
 _SPACE_DATE_RE = re.compile(
-    r'(?:\d{1,2}[/-])?\d{4}\s+(?:present|current|now|actual|date)\b',
+    r'(?:\d{1,2}[/-])?\d{4}\s+(?:present|current|now|actual|date|today|hoje)\b',
     re.IGNORECASE
 )
 
@@ -1794,30 +1825,12 @@ def parse_cv(text: str) -> dict:
     summary = re.sub(r'  +', ' ', summary).strip()     # normalise multiple spaces
 
     # ── Summary length guard ─────────────────────────────────────────────────
-    # Candidates sometimes paste their entire "About" or 10+ bullet summary
-    # verbatim into the CV.  Truncate to the first 2 sentences / ≤80 words so
-    # the Professional Summary box on the PDF stays scannable for recruiters.
-    _SENT_SPLIT_RE = re.compile(r'(?<=[.!?])\s+(?=[A-ZÀ-ɏ])')
-    # Also split on double-newlines (bullet-style summary paragraphs)
-    _summary_raw_parts = re.split(r'\n{2,}', summary)
-    # Flatten into sentences
-    _summary_sentences: list[str] = []
-    for part in _summary_raw_parts:
-        part = part.strip()
-        if part:
-            _summary_sentences.extend(_SENT_SPLIT_RE.split(part))
-    if len(summary.split()) > 80 or len(_summary_sentences) > 3:
-        kept: list[str] = []
-        wcount = 0
-        for sent in _summary_sentences:
-            wc = len(sent.split())
-            if wcount + wc > 80 and kept:
-                break
-            kept.append(sent)
-            wcount += wc
-        summary = " ".join(kept).strip()
-        if summary and summary[-1] not in ".!?":
-            summary = summary.rstrip() + "."
+    # Candidates sometimes paste their entire LinkedIn "About" (10+ bullets,
+    # 300+ words) into the CV.  A wall of text in the Professional Summary box
+    # is worse than no summary at all — it buries the candidate's experience.
+    # Rule: if the summary exceeds 80 words, remove it entirely.
+    if len(summary.split()) > 80:
+        summary = ""
 
     # ── Tech-skills rescue: "Languages" section containing programming/tool names ──
     # Some CVs (e.g. Indian consulting CVs) list tech tools under a heading called
@@ -1851,6 +1864,16 @@ def parse_cv(text: str) -> dict:
         r'maintained|established|prepared|provided|collaborated|worked|'
         r'facilitated|identified|ensured|conducted)\b', re.IGNORECASE
     )
+    # Known city/country names that should NEVER appear as skills even when
+    # they happen to be inside parentheses in an experience bullet.
+    _LOCATION_NAMES = {
+        'hyderabad','bangalore','mumbai','delhi','chennai','pune','kolkata',
+        'dublin','london','new york','paris','amsterdam','berlin','madrid',
+        'sydney','toronto','singapore','dubai','hong kong','rio de janeiro',
+        'são paulo','bogotá','lima','santiago','buenos aires','mexico city',
+        'ireland','india','usa','uk','brazil','brasil','australia','canada',
+        'remote','hybrid','onsite','on-site','on site',
+    }
     if not skills and experience:
         inferred = []
         seen = set()
@@ -1860,7 +1883,9 @@ def parse_cv(text: str) -> dict:
                 for group in re.findall(r'\(([^)]{5,60})\)', bullet):
                     for item in re.split(r'[,;]', group):
                         item = item.strip()
-                        if 3 < len(item) < 28 and item.lower() not in seen:
+                        if (3 < len(item) < 28
+                                and item.lower() not in seen
+                                and item.lower() not in _LOCATION_NAMES):
                             seen.add(item.lower())
                             inferred.append(item)
         skills = inferred[:15]
