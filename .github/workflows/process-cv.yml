@@ -5,7 +5,12 @@ on:
     paths:
       - 'inbox/**'
       - 'scripts/process_cv.py'   # parser fix → reprocess all
-  workflow_dispatch:              # manual trigger (always reprocesses all)
+  workflow_dispatch:              # manual trigger
+    inputs:
+      files:
+        description: 'Specific inbox file(s) to reprocess, pipe-separated (e.g. inbox/iracy.pdf|inbox/other.pdf). Leave blank to reprocess ALL.'
+        required: false
+        default: ''
 
 # Serialize all CV-processing runs — prevents concurrent push conflicts
 concurrency:
@@ -58,10 +63,15 @@ jobs:
           # Pull latest state first — queued runs need the current HEAD
           git pull --rebase origin main 2>/dev/null || true
 
-          # If process_cv.py changed (parser update) OR manual dispatch → reprocess ALL
+          # If specific files were requested via workflow_dispatch input, use those only
+          DISPATCH_FILES="${{ github.event.inputs.files }}"
           PARSER_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c 'scripts/process_cv.py' || echo 0)
           MANUAL_DISPATCH=${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
-          if [ "$PARSER_CHANGED" -gt 0 ] || [ "$MANUAL_DISPATCH" = "true" ]; then
+
+          if [ -n "$DISPATCH_FILES" ]; then
+            echo "Targeted reprocess: $DISPATCH_FILES"
+            echo "$DISPATCH_FILES" | tr '|' '\n' > /tmp/new_cvs.txt
+          elif [ "$PARSER_CHANGED" -gt 0 ] || [ "$MANUAL_DISPATCH" = "true" ]; then
             echo "Parser changed or manual dispatch — reprocessing ALL inbox CVs"
             find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
               | sort > /tmp/new_cvs.txt || true
