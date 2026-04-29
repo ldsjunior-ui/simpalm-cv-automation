@@ -1152,14 +1152,6 @@
     "source_file": "inbox/gonzalo.pdf"
   },
   {
-    "name": "Iracy Gomes",
-    "title": "Senior C- Executive Assistant",
-    "location": "BRAZILIAN  AND PORTUGUESE  CITIZENSHIP",
-    "filename": "Iracy Gomes - CV Simpalm Staffing.pdf",
-    "processed": "2026-04-28T21:07:14Z",
-    "source_file": "inbox/iracy.pdf"
-  },
-  {
     "name": "JUAN DIEGO GUTIERREZ",
     "title": "",
     "location": "",
@@ -1278,5 +1270,13 @@
     "filename": "LILIAN DOUMEN - CV Simpalm Staffing.pdf",
     "processed": "2026-04-29T19:33:02Z",
     "source_file": "inbox/Lilian Martins.pdf"
+  },
+  {
+    "name": "Iracy Gomes",
+    "title": "Senior C- Executive Assistant",
+    "location": "BRAZILIAN  AND PORTUGUESE  CITIZENSHIP",
+    "filename": "Iracy Gomes - CV Simpalm Staffing.pdf",
+    "processed": "2026-04-29T19:48:55Z",
+    "source_file": "inbox/iracy.pdf"
   }
 ]
