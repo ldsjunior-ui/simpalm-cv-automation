@@ -43,6 +43,8 @@
         min-height: 1122px;
         box-shadow: 0 8px 60px rgba(30,39,54,0.18);
       }
+      /* Clip content visually in the browser preview — NOT in print/WeasyPrint */
+      .main { overflow: hidden; }
     }
 
     /* ── TOP STRIPE ── */
@@ -296,7 +298,8 @@
       flex: 1;
       padding: 20px 26px 20px 22px;
       min-width: 0;
-      overflow: hidden;
+      /* overflow:hidden lives in @media screen only — WeasyPrint must never see it
+         or long CVs get clipped to 1 page instead of flowing onto page 2+ */
     }
 
     /* Each section block — display:block avoids WeasyPrint flex-gap quirks */
@@ -576,7 +579,7 @@
       /* Main content sits right of the float */
       .main {
         margin-left: 222px;
-        overflow: visible;
+        /* overflow:hidden is screen-only — no need to override here */
       }
 
       /* Clearfix so WeasyPrint knows the body height includes floated sidebar */
