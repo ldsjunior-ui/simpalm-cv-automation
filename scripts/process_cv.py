@@ -119,7 +119,7 @@ def extract_text(path: str) -> str:
 # ── Section Detection ─────────────────────────────────────────────────────────
 
 SECTION_PATTERNS = {
-    "summary":        r"(?i)^(professional\s+)?(summary|profile)|about\s+me|objective|overview|executive\s+summary|career\s+synopsis|career\s+summary|career\s+profile|aims?\s*[&e]?\s*goals?|personal\s+statement",
+    "summary":        r"(?i)^(professional\s+)?(summary|profile)|about\s+me|objective\b|overview\b|executive\s+summary|career\s+synopsis|career\s+summary|career\s+profile|aims?\s*[&e]?\s*goals?|personal\s+statement",
     "experience":     r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history|work\s+history",
     "education":      r"(?i)^education|academic|qualification|degree|university|college",
     "skills":         r"(?i)^(\w+\s+)?(skills?|abilities|competenc\w*)|expertise|technologies|tools",
