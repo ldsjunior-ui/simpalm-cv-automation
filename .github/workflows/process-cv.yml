@@ -97,13 +97,20 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          FAILED=0
           while IFS= read -r cv_file; do
             if [ -f "$cv_file" ]; then
               echo "──────────────────────────────────"
               echo "Processing: $cv_file"
-              python scripts/process_cv.py "$cv_file"
+              python scripts/process_cv.py "$cv_file" || {
+                echo "⚠️  WARN: $cv_file failed — skipping (continuing with remaining files)"
+                FAILED=$((FAILED + 1))
+              }
             fi
           done < /tmp/new_cvs.txt
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::warning::$FAILED CV(s) failed to process — check logs above"
+          fi
 
       - name: Commit processed PDFs and index
         if: steps.detect.outputs.count > 0
