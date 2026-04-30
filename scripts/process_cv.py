@@ -243,7 +243,11 @@ def parse_header(header_text: str) -> dict:
         r'^(curriculum\s+vitae|resume|cv\b|professional\s+(experience|summary|profile)|'
         r'work\s+experience|education|skills|summary|executive\s+(summary|profile)|'
         r'career\s+(synopsis|objective|profile|summary)|professional\s+background|'
-        r'strengths?|about\s+me|objective|overview|highlights?|qualifications?)',
+        r'strengths?|about\s+me|objective|overview|highlights?|qualifications?|'
+        r'contact(ar|s)?|roles?|responsibilities|references?|'
+        r'personal\s+(data|information|profile|statement)|'
+        r'additional\s+(information|details?)|'
+        r'language[s]?|certifications?|awards?|achievements?)',
         re.IGNORECASE
     )
     name = "Candidate"

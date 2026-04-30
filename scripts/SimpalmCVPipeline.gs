@@ -339,9 +339,16 @@ function syncFromGitHub() {
   const props  = PropertiesService.getScriptProperties();
   const synced = JSON.parse(props.getProperty(SYNCED_KEY) || '{}');
 
-  // Fetch the GitHub-side index.json
+  // Fetch the GitHub-side index.json (wrapped in try/catch — network errors
+  // throw even with muteHttpExceptions:true, e.g. "Address unavailable")
   const indexUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/index.json`;
-  const idxRes   = UrlFetchApp.fetch(indexUrl, { muteHttpExceptions: true });
+  let idxRes;
+  try {
+    idxRes = UrlFetchApp.fetch(indexUrl, { muteHttpExceptions: true });
+  } catch (netErr) {
+    Logger.log(`⚠️ Could not reach GitHub index.json — skipping sync: ${netErr.message}`);
+    return;
+  }
 
   if (idxRes.getResponseCode() !== 200) {
     Logger.log('GitHub index.json not available yet — skipping sync.');
@@ -369,8 +376,21 @@ function syncFromGitHub() {
 
     if (!driveFileId) {
       // Download the branded PDF from GitHub raw
+      // Guard: skip clearly invalid filenames (section headers mistakenly used as names)
+      const _JUNK_RE = /^(curriculum vitae|executive summary|contact|roles?|responsibilities|references?|personal (data|information)|skills|education|overview|resume)\b/i;
+      if (_JUNK_RE.test(filename)) {
+        Logger.log(`⚠️ Skipping invalid entry with section-header filename: "${filename}"`);
+        continue;
+      }
+
       const pdfUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/processed/${encodeURIComponent(filename)}`;
-      const pdfRes = UrlFetchApp.fetch(pdfUrl, { muteHttpExceptions: true });
+      let pdfRes;
+      try {
+        pdfRes = UrlFetchApp.fetch(pdfUrl, { muteHttpExceptions: true });
+      } catch (netErr) {
+        Logger.log(`⚠️ Network error fetching "${filename}" — skipping: ${netErr.message}`);
+        continue;
+      }
 
       if (pdfRes.getResponseCode() !== 200) {
         Logger.log(`⏳ PDF not ready on GitHub yet: ${filename}`);
