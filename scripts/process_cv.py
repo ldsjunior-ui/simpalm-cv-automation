@@ -222,13 +222,40 @@ PHONE_RE    = re.compile(r"[\+]?[\d][\d\s\-().]{7,16}[\d]")
 LINKEDIN_RE = re.compile(r"linkedin\.com/in/[\w\-]+", re.IGNORECASE)
 
 LOCATION_KEYWORDS = [
-    "brazil", "brasil", "usa", "uk", "canada",
-    "mexico", "colombia", "argentina", "spain", "españa", "madrid", "barcelona",
-    "portugal", "chile", "peru", "brasília", "são paulo", "rio de janeiro",
-    "distrito federal", "new york", "miami", "california", "london",
+    # Americas
+    "brazil", "brasil", "usa", "united states", "canada", "mexico",
+    "colombia", "argentina", "chile", "peru", "venezuela", "ecuador",
+    "bolivia", "paraguay", "uruguay", "costa rica", "panama",
+    "el salvador", "guatemala", "honduras", "nicaragua",
+    "dominican republic", "república dominicana",
+    # Cities — Americas
+    "brasília", "são paulo", "rio de janeiro", "distrito federal",
+    "new york", "miami", "california", "chicago", "los angeles",
+    "toronto", "vancouver", "bogota", "lima", "santiago",
+    # Europe
+    "uk", "united kingdom", "london", "ireland", "dublin",
+    "spain", "españa", "madrid", "barcelona", "portugal", "lisbon",
+    "poland", "warsaw", "ukraine", "kyiv", "romania", "bucharest",
+    # Africa
+    "nigeria", "lagos", "abuja", "ghana", "accra",
+    "kenya", "nairobi", "south africa", "johannesburg", "cape town",
+    # Asia-Pacific
+    "india", "mumbai", "delhi", "new delhi", "bangalore", "bengaluru",
+    "hyderabad", "pune", "chennai", "kolkata", "noida", "gurgaon",
+    "pakistan", "karachi", "lahore", "islamabad",
+    "philippines", "manila", "indonesia", "jakarta",
+    "bangladesh", "dhaka", "vietnam", "hanoi",
+    "australia", "sydney", "melbourne",
     # Note: "remote" and "international" removed — both appear in job titles
     # ("Remote sensing", "International Executive Assistant") causing false positives.
 ]
+
+# Lines that look like credential chains (e.g. "CPA (USA) | CMA (USA") — reject as location
+_CREDENTIAL_LINE_RE = re.compile(
+    r'\b(CPA|CMA|CFA|CA|MBA|LLB|PhD|FCA|ACCA|ACA|FCCA|CGA|CIA|EA|CFP|CISA|CGMA)\b'
+    r'\s*[\(\[–\-]',
+    re.IGNORECASE
+)
 
 def parse_header(header_text: str) -> dict:
     lines = [l.strip() for l in header_text.splitlines() if l.strip()]
@@ -342,7 +369,10 @@ def parse_header(header_text: str) -> dict:
         if EMAIL_RE.search(line) or PHONE_RE.search(line) or LINKEDIN_RE.search(line):
             continue
         ll = line.lower()
-        is_location = any(kw in ll for kw in LOCATION_KEYWORDS)
+        is_location = (
+            any(kw in ll for kw in LOCATION_KEYWORDS)
+            and not _CREDENTIAL_LINE_RE.search(line)   # reject "CPA (USA) | CMA (USA"
+        )
         if is_location and not location:
             location = line
         elif not title and not is_location and 3 < len(line) < 120:
@@ -2087,6 +2117,37 @@ def parse_cv(text: str) -> dict:
         # Shorten long role titles to a clean summary
         parts = re.split(r"[|,&]", derived)
         header["candidate_title"] = " · ".join(p.strip() for p in parts[:3] if p.strip())[:100]
+
+    # ── Location fallback: scan full text when header gave nothing ────────────
+    # Tries to find a clean city/country line from the education or experience
+    # sections (e.g. "Mumbai, India" inside a university line, or "London, UK"
+    # in a company address).  Prefers short lines (≤ 60 chars) that contain a
+    # LOCATION_KEYWORD and are not credential chains.
+    if not header["candidate_location"]:
+        _LOC_CANDIDATE_RE = re.compile(
+            r'^[A-Za-zÀ-ÖØ-öø-ÿ\s,./\-()]+$'  # only letters, spaces, punctuation
+        )
+        for line in text.splitlines():
+            s = line.strip()
+            if not s or len(s) > 80 or len(s) < 3:
+                continue
+            sl = s.lower()
+            if not any(kw in sl for kw in LOCATION_KEYWORDS):
+                continue
+            if _CREDENTIAL_LINE_RE.search(s):
+                continue
+            if EMAIL_RE.search(s) or PHONE_RE.search(s) or LINKEDIN_RE.search(s):
+                continue
+            # Reject lines with digits (dates, zip codes, street numbers)
+            if re.search(r'\d', s):
+                continue
+            # Reject long sentences (part of a narrative)
+            if len(s.split()) > 10:
+                continue
+            # Prefer lines that look like "City, Country" or just "Country"
+            if _LOC_CANDIDATE_RE.match(s):
+                header["candidate_location"] = s
+                break
 
     return {
         **header,
