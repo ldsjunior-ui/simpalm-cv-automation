@@ -244,15 +244,32 @@ def parse_header(header_text: str) -> dict:
         r'work\s+experience|education|skills|summary|executive\s+(summary|profile)|'
         r'career\s+(synopsis|objective|profile|summary)|professional\s+background|'
         r'strengths?|about\s+me|objective|overview|highlights?|qualifications?|'
-        r'contact(ar|s)?|roles?|responsibilities|references?|'
+        r'contact(ar|o|s)?|contato|roles?|responsibilities|references?|'
         r'personal\s+(data|information|profile|statement)|'
         r'additional\s+(information|details?)|'
-        r'language[s]?|certifications?|awards?|achievements?)',
+        r'language[s]?|certifications?|awards?|achievements?|'
+        r'programme?\s+manager|business\s+management|project\s+manager|'
+        r'senior\s+\w+|junior\s+\w+|lead\s+\w+|'
+        r'argentina|brazil|brasil|india|ireland|pakistan|nigeria|ghana|kenya|'
+        r'philippines|indonesia|mexico|colombia|peru|chile|spain|portugal|'
+        r'united\s+(states|kingdom)|usa\b|uk\b|uae\b|'
+        r'https?://|www\.|linkedin\.com)',
         re.IGNORECASE
     )
+
+    # Lines that look like "City, Country" or "City State" — reject as names
+    _LOCATION_LINE_RE = re.compile(
+        r'^[\w\s]+,\s*(india|usa|uk|ireland|brazil|brasil|pakistan|nigeria|'
+        r'illinois|california|texas|new\s+york|florida|mumbai|bangalore|'
+        r'hyderabad|delhi|pune|chennai|dubai|singapore|london|toronto)\s*$',
+        re.IGNORECASE
+    )
+
     name = "Candidate"
     for line in lines[:5]:   # check first 5 lines only
         if not line or line[0].isdigit() or _NAME_JUNK_RE.match(line):
+            continue
+        if _LOCATION_LINE_RE.match(line.strip()):
             continue
         # If the line contains a tab or many consecutive spaces it's probably
         # name + location on the same line (e.g. "RENE BONOMI   São Paulo").
@@ -261,17 +278,25 @@ def parse_header(header_text: str) -> dict:
         # Strip credential/qualification suffixes enclosed in brackets:
         # "Rahul Shah [CA – India, CPA – USA (Awaiting License), LLB]" → "Rahul Shah"
         clean_no_creds = re.sub(r'\s*[\[\(][^\]\)]*[\]\)].*', '', clean).strip()
+        # Also strip trailing credential abbreviations after comma/pipe:
+        # "Rahul Shah, CA, CPA" → "Rahul Shah"
+        clean_no_creds = re.sub(
+            r'\s*[,|]\s*(CA|CPA|CFA|MBA|LLB|PhD|MD|BCA|MCA|BE|BTech|MTech|'
+            r'MSc|BSc|BBA|MFin|MSF|CMA|FCA|FCCA|ACCA|ACA)[\s,|].*$',
+            '', clean_no_creds, flags=re.IGNORECASE).strip()
         # Guard on the CLEAN portion (not the full line which may have trailing spaces+location)
         if len(clean_no_creds) > 60:
             continue
-        if _NAME_JUNK_RE.match(clean_no_creds):
+        if _NAME_JUNK_RE.match(clean_no_creds) or _LOCATION_LINE_RE.match(clean_no_creds):
             continue
         # Must look like a real name: 1-5 words, all starting with a letter,
         # no special chars like brackets or punctuation
+        # Single-word names must be ≥3 chars (rejects "YN", "BA", etc.)
         words = clean_no_creds.split()
         if (1 <= len(words) <= 5
                 and all(w[0].isalpha() for w in words)
-                and not re.search(r'[(){}\[\]<>@#$%^&*]', clean_no_creds)):
+                and not re.search(r'[(){}\[\]<>@#$%^&*]', clean_no_creds)
+                and not (len(words) == 1 and len(clean_no_creds) < 3)):
             name = clean_no_creds
             break
     # If we still have "Candidate", fall back to the first ≤50-char non-junk line
@@ -280,12 +305,19 @@ def parse_header(header_text: str) -> dict:
         for line in lines[:8]:
             # Also try bracket-stripping on fallback candidates
             line_stripped = re.sub(r'\s*[\[\(][^\]\)]*[\]\)].*', '', line).strip()
+            line_stripped = re.sub(
+                r'\s*[,|]\s*(CA|CPA|CFA|MBA|LLB|PhD|MD|BCA|MCA|BE|BTech|MTech|'
+                r'MSc|BSc|BBA|MFin|MSF|CMA|FCA|FCCA|ACCA|ACA)[\s,|].*$',
+                '', line_stripped, flags=re.IGNORECASE).strip()
             if len(line_stripped) > 50 or not line_stripped or _NAME_JUNK_RE.match(line_stripped):
+                continue
+            if _LOCATION_LINE_RE.match(line_stripped):
                 continue
             words = line_stripped.split()
             if (1 <= len(words) <= 4
                     and all(w[0].isalpha() for w in words)
-                    and not re.search(r'[(){}\[\]<>@#$%^&*:,.]', line_stripped)):
+                    and not re.search(r'[(){}\[\]<>@#$%^&*:,.]', line_stripped)
+                    and not (len(words) == 1 and len(line_stripped) < 3)):
                 name = line_stripped
                 break
 
