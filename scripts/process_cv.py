@@ -120,7 +120,7 @@ def extract_text(path: str) -> str:
 
 SECTION_PATTERNS = {
     "summary":        r"(?i)^(professional\s+)?(summary|profile)|about\s+me|objective\b|overview\b|executive\s+summary|career\s+synopsis|career\s+summary|career\s+profile|aims?\s*[&e]?\s*goals?|personal\s+statement",
-    "experience":     r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history|work\s+history",
+    "experience":     r"(?i)^(professional\s+|work\s+)?experience|employment|career\s+history|work\s+history|current\s+role\b|past\s+(role|employer|employment)\b|previous\s+(role|employment)\b|roles?\s+(held|&\s+responsibilities)|work\s+details?",
     "education":      r"(?i)^education|academic|qualification|degree|university|college",
     "skills":         r"(?i)^(\w+\s+)?(skills?|abilities|competenc\w*)|expertise|technologies|tools",
     "languages":      r"(?i)^languages?",
@@ -825,6 +825,51 @@ def parse_experience(exp_text: str) -> list:
 
     lines = [l.rstrip() for l in exp_text.splitlines()]
 
+    # ── Pre-normalize: "Current/Past Employer + Designation" format ──────────
+    # Indian CVs often use labeled fields instead of inline role headers:
+    #   Current Employer: Fincent Software (Period of Employment: Nov 2025 till date)
+    #   Current Designation: Director of Operations & Strategy
+    # Normalise these into "ROLE, COMPANY  PERIOD" so the main parser picks them up.
+    _EMP_RE   = re.compile(
+        r'^(current|past|previous|former)\s+employer\s*:\s*(.+?)'
+        r'\s*\(period\s+of\s+employment\s*:\s*([^)]+)\)',
+        re.IGNORECASE
+    )
+    _DESIG_RE = re.compile(
+        r'^(?:(?:current|final|last|previous)\s+)?designation\s*:\s*(.+)',
+        re.IGNORECASE
+    )
+    _REPORT_RE = re.compile(r'^reporting\s+to\s*[–\-:]', re.IGNORECASE)
+    normalized_lines: list[str] = []
+    i = 0
+    while i < len(lines):
+        m_emp = _EMP_RE.match(lines[i].strip())
+        if m_emp:
+            company = m_emp.group(2).strip()
+            period  = m_emp.group(3).strip()
+            # Look ahead for Designation line (within next 3 lines)
+            role = ""
+            lookahead_end = min(i + 4, len(lines))
+            for j in range(i + 1, lookahead_end):
+                m_des = _DESIG_RE.match(lines[j].strip())
+                if m_des:
+                    role = m_des.group(1).strip()
+                    lines[j] = ""           # consume the Designation line
+                    break
+            if role:
+                normalized_lines.append(f"{role}, {company}  {period}")
+            else:
+                normalized_lines.append(f"{company}  {period}")
+            i += 1
+            continue
+        # Drop "Reporting to –" lines — they're not experience data
+        if _REPORT_RE.match(lines[i].strip()):
+            i += 1
+            continue
+        normalized_lines.append(lines[i])
+        i += 1
+    lines = normalized_lines
+
     # ── Pre-clean: strip duration suffixes appended to date lines ────────────
     # Some LinkedIn-exported PDFs append "‧3 years 5 months" after the date range.
     # Remove these so DATE_RANGE_RE can match the clean date.
@@ -974,13 +1019,32 @@ def parse_experience(exp_text: str) -> list:
     # Modifiers that signal a work location (remote / hybrid / on-site), not part of the role title.
     _LOCATION_MODIFIERS = {'remote', 'hybrid', 'onsite', 'on-site', 'in-office', 'presencial'}
 
+    # Words that strongly suggest a job title (used by _split_role_company).
+    _ROLE_TITLE_WORDS = {
+        'officer', 'manager', 'director', 'executive', 'assistant', 'associate',
+        'vice', 'president', 'head', 'lead', 'specialist', 'analyst', 'engineer',
+        'consultant', 'coordinator', 'administrator', 'supervisor', 'senior',
+        'junior', 'chief', 'accountant', 'controller', 'treasurer', 'auditor',
+        'advisor', 'representative', 'agent', 'technician', 'developer',
+        'designer', 'architect', 'strategist', 'planner', 'intern', 'trainee',
+        'ceo', 'cfo', 'coo', 'cto', 'cmo', 'svp', 'avp', 'evp', 'vp',
+    }
+    # Words that strongly suggest a company / organisation name.
+    _COMPANY_INDICATOR_WORDS = {
+        'ltd', 'limited', 'inc', 'llc', 'llp', 'corp', 'corporation', 'services',
+        'solutions', 'motors', 'associates', 'group', 'holdings', 'technologies',
+        'systems', 'industries', 'enterprises', 'international', 'global',
+        'consulting', 'agency', 'pvt', 'private', 'foundation', 'institute',
+        'ventures', 'capital', 'bank', 'trust', 'company', 'co',
+    }
+
     def _split_role_company(text: str):
         """
         Split a role+company string into (role, company).
 
         Handles two separator styles:
-        1. Pipe: "Company | Location Role" or "Company | Location Role | extra"
-           — used by Diego-style CVs where company precedes the role on the same line.
+        1. Pipe: either "Company | Role" or "Role | Company"
+           — orientation is detected via role-title vs. company-indicator word scoring.
         2. Comma: "Role Title, Company Name"
            — classic format; only splits on the LAST comma.
         Returns (text, "") when no clean split is found.
@@ -988,8 +1052,29 @@ def parse_experience(exp_text: str) -> list:
         if '|' in text:
             parts = [p.strip() for p in text.split('|')]
             if len(parts) >= 2:
-                company = parts[0].strip()
-                role = parts[-1].strip()
+                p0, pN = parts[0].strip(), parts[-1].strip()
+
+                def _rs(s: str) -> int:
+                    return sum(1 for w in s.lower().split()
+                               if w.strip('.,()') in _ROLE_TITLE_WORDS)
+
+                def _cs(s: str) -> int:
+                    return sum(1 for w in s.lower().split()
+                               if w.strip('.,()') in _COMPANY_INDICATOR_WORDS)
+
+                rs0, rsN = _rs(p0), _rs(pN)
+                cs0, csN = _cs(p0), _cs(pN)
+
+                # "Role | Company": parts[0] looks like a title, parts[-1] like a company.
+                if rs0 > rsN and csN >= cs0:
+                    role, company = p0, pN
+                # "Company | Role": parts[-1] looks like a title, parts[0] like a company.
+                elif cs0 > csN and rsN >= rs0:
+                    role, company = pN, p0
+                else:
+                    # Ambiguous — keep original assumption (Company first, Role last).
+                    company, role = p0, pN
+
                 # Strip leading work-location modifier from role
                 role_words = role.split()
                 if role_words and role_words[0].lower() in _LOCATION_MODIFIERS:
@@ -1033,6 +1118,19 @@ def parse_experience(exp_text: str) -> list:
             before_date = ""
         # Remove trailing empty parentheses left after date extraction, e.g. "… losses ()"
         before_date = re.sub(r'\s*\(\s*\)\s*$', '', before_date).rstrip("–-|·, ").strip()
+
+        # Detect PDF line-wrap: if before_date has an unmatched ')' (more closing
+        # than opening parens), the role/company text started on the PREVIOUS line.
+        # Example: line N-1 = "Associate VP | Quality BPO Services (Rebranded to"
+        #          line N   = "QX Limited) June 2010 – June 2015"
+        # → before_date = "QX Limited)", merge with line N-1.
+        if before_date and before_date.count(')') > before_date.count('('):
+            j = bi - 1
+            while j > prev_bi and not lines[j].strip():
+                j -= 1
+            if j > prev_bi and not DATE_RANGE_RE.search(lines[j].strip()):
+                before_date = (lines[j].strip() + ' ' + before_date).strip()
+                header_indices.add(j)
 
         if before_date:
             # ── Format A: role (and company) on the same line as the date ────
@@ -2141,8 +2239,9 @@ def parse_cv(text: str) -> dict:
             # Reject lines with digits (dates, zip codes, street numbers)
             if re.search(r'\d', s):
                 continue
-            # Reject long sentences (part of a narrative)
-            if len(s.split()) > 10:
+            # Reject long sentences (part of a narrative) — real locations are
+            # at most a city + state/region + country (≤ 6 words).
+            if len(s.split()) > 6:
                 continue
             # Prefer lines that look like "City, Country" or just "Country"
             if _LOC_CANDIDATE_RE.match(s):
@@ -2207,7 +2306,7 @@ def update_index(data: dict, pdf_filename: str, source_path: str = ""):
         if not yr_matches:
             continue
         start = int(yr_matches[0])
-        if any(k in period.lower() for k in ("present", "current", "now", "today")):
+        if any(k in period.lower() for k in ("present", "current", "now", "today", "date", "hoje", "actual")):
             end = datetime.now().year
         elif len(yr_matches) >= 2:
             end = int(yr_matches[1])
