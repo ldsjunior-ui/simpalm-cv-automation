@@ -2138,6 +2138,23 @@ def update_index(data: dict, pdf_filename: str, source_path: str = ""):
     if source_path:
         entry["source_file"] = source_path.replace("\\", "/")
 
+    # Calculate total years of professional experience from role periods
+    yrs = 0
+    for exp in data.get("experience", []):
+        period = exp.get("period", "")
+        yr_matches = re.findall(r"\d{4}", period)
+        if not yr_matches:
+            continue
+        start = int(yr_matches[0])
+        if any(k in period.lower() for k in ("present", "current", "now", "today")):
+            end = datetime.now().year
+        elif len(yr_matches) >= 2:
+            end = int(yr_matches[1])
+        else:
+            continue  # single year without "present" — can't determine duration
+        yrs += max(0, end - start)
+    entry["years_experience"] = yrs
+
     index.append(entry)
     INDEX_PATH.write_text(json.dumps(index, indent=2, ensure_ascii=False))
     print(f"✅ index.json updated ({len(index)} entries)")
