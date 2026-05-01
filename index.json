@@ -152,14 +152,6 @@
     "source_file": "inbox/1763733652Giuliana.pdf"
   },
   {
-    "name": "Savita Nair",
-    "title": "Mumbai, India",
-    "location": "CPA (USA) | CMA (USA",
-    "filename": "Savita Nair - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-01T19:04:14Z",
-    "source_file": "inbox/1769229963Savita_Nair_Resume_2026 (2).docx"
-  },
-  {
     "name": "Vinay Gorantla",
     "title": "HSBC",
     "location": "",
@@ -230,14 +222,6 @@
     "filename": "BHOOMIKAM - CV Simpalm Staffing.pdf",
     "processed": "2026-05-01T19:04:44Z",
     "source_file": "inbox/Bhoomika resume.pdf"
-  },
-  {
-    "name": "LinkedIn: https://www.linkedin.com/in/renebonomi/",
-    "title": "Founder and CEO",
-    "location": "",
-    "filename": "LinkedIn httpswwwlinkedincominrenebonomi - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-01T19:04:48Z",
-    "source_file": "inbox/Bonomi_Rene_Resume (1).pdf"
   },
   {
     "name": "CARLA FRUGONI",
@@ -704,14 +688,6 @@
     "source_file": "inbox/RaghavendraShukla.pdf"
   },
   {
-    "name": "Rahul Shah",
-    "title": "",
-    "location": "",
-    "filename": "Rahul Shah - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-01T19:07:38Z",
-    "source_file": "inbox/Rahul_Shah.pdf"
-  },
-  {
     "name": "Ramyasri Nallani",
     "title": "Master of Science: Computer and Information Sciences, Texas Tech University | Texas",
     "location": "As a part of administration, configured usage metrics, users, audit logs, Tenant settings, Dashboard settings, Power BI Apps settings, Power BI premium and Premium Capacity Settings.",
@@ -806,14 +782,6 @@
     "filename": "Kaushal Kulkarni - CV Simpalm Staffing.pdf",
     "processed": "2026-05-01T19:08:07Z",
     "source_file": "inbox/Resume_Kaushal Kulkarni.pdf"
-  },
-  {
-    "name": "RICHARD DUVAL",
-    "title": "Remote Finance Professional | Financial Controlling | Accounting & Treasury | FP&A |",
-    "location": "Italian working and living in Mexico (Remote working – Permanent Resident with Work Permit)",
-    "filename": "RICHARD DUVAL - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-01T19:08:10Z",
-    "source_file": "inbox/Richard_A__Duval.pdf"
   },
   {
     "name": "ROCIO V. PEREYRA VICARE",
@@ -1264,11 +1232,48 @@
     "source_file": "inbox/uppala_harika (1).pdf"
   },
   {
+    "name": "Savita Nair",
+    "title": "Mumbai, India",
+    "location": "CPA (USA) | CMA (USA",
+    "filename": "Savita Nair - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-01T20:26:28Z",
+    "source_file": "inbox/1769229963Savita_Nair_Resume_2026 (2).docx",
+    "years_experience": 25
+  },
+  {
+    "name": "Rahul Shah",
+    "title": "",
+    "location": "",
+    "filename": "Rahul Shah - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-01T20:26:31Z",
+    "source_file": "inbox/1772113594Rahul_Shah_.pdf",
+    "years_experience": 0
+  },
+  {
+    "name": "LinkedIn: https://www.linkedin.com/in/renebonomi/",
+    "title": "Founder and CEO",
+    "location": "",
+    "filename": "LinkedIn httpswwwlinkedincominrenebonomi - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-01T20:26:33Z",
+    "source_file": "inbox/Bonomi_Rene_Resum.pdf",
+    "years_experience": 12
+  },
+  {
     "name": "María Soledad Otero",
     "title": "Paralegal",
     "location": "Viedma, Argentina",
     "filename": "María Soledad Otero - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-01T20:13:03Z",
-    "source_file": "inbox/Maria Soledad Otero.pdf"
+    "processed": "2026-05-01T20:26:35Z",
+    "source_file": "inbox/Maria Soledad Otero.pdf",
+    "years_experience": 15
+  },
+  {
+    "name": "RICHARD DUVAL",
+    "title": "Remote Finance Professional | Financial Controlling | Accounting & Treasury | FP&A |",
+    "location": "Italian working and living in Mexico (Remote working – Permanent Resident with Work Permit)",
+    "filename": "RICHARD DUVAL - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-01T20:26:38Z",
+    "source_file": "inbox/Richard_A__Duval.pdf",
+    "years_experience": 6
   }
 ]
