@@ -52,6 +52,60 @@ function getToken() {
   return t;
 }
 
+// ── Reliable GitHub fetch (replaces raw.githubusercontent.com) ───────────────
+// Uses api.github.com with the auth token — different routing from GAS IPs,
+// avoids the "Address unavailable" error that hits raw.githubusercontent.com.
+// Retries 3× with exponential backoff on network-level exceptions.
+function _ghApiFetch(path, options, retries) {
+  retries = (retries === undefined) ? 3 : retries;
+  const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}?ref=${GH_BRANCH}`;
+  const opts = Object.assign({
+    headers: {
+      Authorization: `token ${getToken()}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+    muteHttpExceptions: true,
+  }, options || {});
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res = UrlFetchApp.fetch(url, opts);
+      return res;
+    } catch (e) {
+      if (attempt === retries - 1) throw e;
+      Logger.log(`⚠️ GitHub fetch attempt ${attempt + 1} failed: ${e.message} — retrying…`);
+      Utilities.sleep(2000 * Math.pow(2, attempt)); // 2s, 4s, 8s
+    }
+  }
+}
+
+// Fetch a file's raw content from GitHub (text or binary) via the Contents API.
+// For JSON/text files: returns parsed string.
+// For binary files: returns Blob.
+function _ghGetFileContent(path, asBinary) {
+  let res;
+  try {
+    res = _ghApiFetch(path, {
+      headers: {
+        Authorization: `token ${getToken()}`,
+        Accept: asBinary ? 'application/vnd.github.v3.raw' : 'application/vnd.github.v3+json',
+      },
+      muteHttpExceptions: true,
+    });
+  } catch (e) {
+    Logger.log(`⚠️ Could not reach api.github.com for "${path}": ${e.message}`);
+    return null;
+  }
+  if (!res || res.getResponseCode() !== 200) return null;
+  if (asBinary) return res.getBlob();
+  // JSON response: { content: "<base64-with-newlines>", encoding: "base64", ... }
+  const data = JSON.parse(res.getContentText());
+  const raw  = Utilities.newBlob(
+    Utilities.base64Decode(data.content.replace(/\n/g, ''))
+  ).getDataAsString();
+  return raw;
+}
+
 // ── Web App endpoint ─────────────────────────────────────────────────────────
 // Supports three actions via ?action=<value>:
 //   (default / 'index') → palmdeck-index.json  (used by PalmDeck CV picker)
@@ -339,23 +393,15 @@ function syncFromGitHub() {
   const props  = PropertiesService.getScriptProperties();
   const synced = JSON.parse(props.getProperty(SYNCED_KEY) || '{}');
 
-  // Fetch the GitHub-side index.json (wrapped in try/catch — network errors
-  // throw even with muteHttpExceptions:true, e.g. "Address unavailable")
-  const indexUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/index.json`;
-  let idxRes;
-  try {
-    idxRes = UrlFetchApp.fetch(indexUrl, { muteHttpExceptions: true });
-  } catch (netErr) {
-    Logger.log(`⚠️ Could not reach GitHub index.json — skipping sync: ${netErr.message}`);
+  // Fetch the GitHub-side index.json via authenticated Contents API
+  // (raw.githubusercontent.com is blocked from GAS IPs — use api.github.com instead)
+  const rawIndex = _ghGetFileContent('index.json', false);
+  if (rawIndex === null) {
+    Logger.log('⚠️ Could not reach GitHub index.json — skipping sync.');
     return;
   }
 
-  if (idxRes.getResponseCode() !== 200) {
-    Logger.log('GitHub index.json not available yet — skipping sync.');
-    return;
-  }
-
-  const ghIndex = JSON.parse(idxRes.getContentText());
+  const ghIndex = JSON.parse(rawIndex);
   if (!ghIndex.length) {
     Logger.log('GitHub index is empty — nothing to sync.');
     return;
@@ -383,21 +429,13 @@ function syncFromGitHub() {
         continue;
       }
 
-      const pdfUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/processed/${encodeURIComponent(filename)}`;
-      let pdfRes;
-      try {
-        pdfRes = UrlFetchApp.fetch(pdfUrl, { muteHttpExceptions: true });
-      } catch (netErr) {
-        Logger.log(`⚠️ Network error fetching "${filename}" — skipping: ${netErr.message}`);
+      // Download branded PDF via authenticated Contents API (raw accept header → binary blob)
+      const blob = _ghGetFileContent(`processed/${encodeURIComponent(filename)}`, true);
+      if (blob === null) {
+        Logger.log(`⏳ PDF not ready or unreachable on GitHub yet: ${filename}`);
         continue;
       }
-
-      if (pdfRes.getResponseCode() !== 200) {
-        Logger.log(`⏳ PDF not ready on GitHub yet: ${filename}`);
-        continue;
-      }
-
-      const blob      = pdfRes.getBlob().setName(filename).setContentType('application/pdf');
+      blob.setName(filename).setContentType('application/pdf');
       const driveFile = procFolder.createFile(blob);
       try {
         driveFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -412,14 +450,16 @@ function syncFromGitHub() {
     }
 
     driveIndex.push({
-      name:            entry.name,
-      title:           entry.title    || '',
-      location:        entry.location || '',
-      filename:        filename,
-      driveFileId:     driveFileId,
-      drivePreviewUrl: `https://drive.google.com/file/d/${driveFileId}/preview`,
-      driveDownloadUrl:`https://drive.google.com/uc?export=download&id=${driveFileId}`,
-      processed:       entry.processed,
+      name:             entry.name,
+      title:            entry.title            || '',
+      location:         entry.location         || '',
+      years_experience: entry.years_experience || null,
+      source_file:      entry.source_file      || '',
+      filename:         filename,
+      driveFileId:      driveFileId,
+      drivePreviewUrl:  `https://drive.google.com/file/d/${driveFileId}/preview`,
+      driveDownloadUrl: `https://drive.google.com/uc?export=download&id=${driveFileId}`,
+      processed:        entry.processed,
     });
   }
 
