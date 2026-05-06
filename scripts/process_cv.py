@@ -352,6 +352,46 @@ def parse_header(header_text: str) -> dict:
     phone    = next((PHONE_RE.search(l).group().strip() for l in lines if PHONE_RE.search(l)), "")
     linkedin = next((LINKEDIN_RE.search(l).group() for l in lines if LINKEDIN_RE.search(l)), "")
 
+    # Multi-column PDF fallback: pdfminer sometimes produces a long first line that
+    # concatenates section keywords with the name (e.g. "SUMMARYRAJDEEP JADAVemail@…").
+    # Try to peel the section keyword prefix off any long uppercase word to recover the name.
+    if name == "Candidate" and lines:
+        _SECTION_PREFIX_RE = re.compile(
+            r'^(SUMMARY|PROFILE|PROFESSIONAL|EXPERIENCE|WORK|EDUCATION|SKILLS|'
+            r'OBJECTIVE|OVERVIEW|ABOUT)([A-Z][A-Z]+)',
+            re.IGNORECASE
+        )
+        for word in re.findall(r'[A-Z]{6,}', ' '.join(lines[:2])):
+            m = _SECTION_PREFIX_RE.match(word)
+            if not m:
+                continue
+            first_part = m.group(2).title()          # e.g. "RAJDEEP" → "Rajdeep"
+            # Find the next all-caps word following the concatenated word in the text
+            # Use lookahead (?=[^A-Z]|$) instead of \b — pdfminer sometimes omits
+            # the space between last name and email ("JADAVrajjadav14@") causing
+            # \b to fail (both 'V' and 'r' are \w characters).
+            _combined = ' '.join(lines[:2])
+            after = re.search(re.escape(word) + r'\s+([A-Z]{2,12})(?=[^A-Z]|$)', _combined)
+            if after:
+                last_part = after.group(1).title()   # e.g. "JADAV" → "Jadav"
+                candidate = f"{first_part} {last_part}"
+                if not _NAME_JUNK_RE.match(candidate):
+                    name = candidate
+                    break
+
+    # If name has no spaces and is all-uppercase, pdfminer may have concatenated
+    # "FIRST LAST" → "FIRSTLAST".  Try to recover the split from the email local part.
+    # e.g. "TANMAYBANERJEE" + email "tanmay.banerjee23rd@gmail.com"
+    #       → email parts ["tanmay","banerjee"] → "TANMAYBANERJEE" → "Tanmay Banerjee"
+    if ' ' not in name and name == name.upper() and len(name) > 8 and email:
+        _local = email.split('@')[0]
+        _parts = re.split(r'[._+\-]', _local)
+        # Strip trailing digits from each part (e.g. "banerjee23rd" → "banerjee")
+        _parts = [re.sub(r'\d.*', '', p) for p in _parts]
+        _parts = [p for p in _parts if p.isalpha() and 2 <= len(p) <= 20]
+        if _parts and ''.join(_parts).upper() == name:
+            name = ' '.join(p.title() for p in _parts)
+
     # Additional patterns that mark a line as a section heading (not a title)
     _SECTION_HEADING_RE = re.compile(
         r'^(personal\s+data|personal\s+information|contact|references?|'
@@ -391,6 +431,24 @@ def parse_header(header_text: str) -> dict:
             # Reject lines starting with non-alphanumeric chars (icons, bullets, Unicode variants, etc.)
             # Use regex to catch all Unicode bullet/arrow/symbol variants beyond plain isalnum()
             if re.match(r'^[^\w]', line.strip()):
+                continue
+            # Reject URL slug fragments: wrapped GitHub/portfolio URL second lines
+            # e.g. "anerjee-23rd" is the tail of "https://github.com/TanmayBanerjee-23rd"
+            # Pattern: starts lowercase, no spaces, contains hyphens or slashes
+            if (re.match(r'^[a-z0-9]', line) and ' ' not in line
+                    and re.search(r'[\-/]', line) and len(line) < 50):
+                continue
+            # Reject career objective statements: "To secure a ...", "To obtain ..."
+            # These are goals, not job titles — let the experience-role fallback fill title instead
+            if re.match(r'^To\s+(secure|obtain|seek|find|work|pursue|leverage|achieve|'
+                        r'contribute|build|develop|grow|join|utilize|apply|establish|'
+                        r'gain|use|provide|manage|lead|deliver|excel|thrive)',
+                        line, re.IGNORECASE):
+                continue
+            # Reject sentence continuations: lines starting with a lowercase letter and >5 words
+            # are paragraph mid-sentences (e.g. "back-end expertise while expanding...")
+            # Valid one-concept titles like "iOS Developer" or "dApp Engineer" have ≤5 words
+            if line and line[0].islower() and len(line.split()) > 5:
                 continue
             # Reject short lines ending with digits — likely a street address or ZIP code
             # (e.g. "Xochicalco 295", "03020 Mexico City")
@@ -2217,11 +2275,19 @@ def parse_cv(text: str) -> dict:
 
     # Derive title from first experience role if header had none
     if not header["candidate_title"] and experience:
-        raw = experience[0]["role"]
-        derived = re.sub(DATE_RANGE_RE, "", raw).strip().strip("–-|·").strip()
-        # Shorten long role titles to a clean summary
-        parts = re.split(r"[|,&]", derived)
-        header["candidate_title"] = " · ".join(p.strip() for p in parts[:3] if p.strip())[:100]
+        # Some CVs list "• Remote" or "• City (WFH)" after the date line — those are
+        # location indicators, not titles.  Walk experience entries to find a real role.
+        _BULLET_PREFIX_RE = re.compile(r'^[•▪▸►\-\*·]+\s*')
+        for _exp_item in experience:
+            raw = _exp_item.get("role", "")
+            derived = re.sub(DATE_RANGE_RE, "", raw).strip().strip("–-|·").strip()
+            # Skip bullet-prefixed location indicators (e.g. "• Remote", "• Ahmedabad (WFH)")
+            if _BULLET_PREFIX_RE.match(derived) or len(derived) < 4:
+                continue
+            # Shorten long role titles to a clean summary
+            parts = re.split(r"[|,&]", derived)
+            header["candidate_title"] = " · ".join(p.strip() for p in parts[:3] if p.strip())[:100]
+            break
 
     # ── Location fallback: scan full text when header gave nothing ────────────
     # Tries to find a clean city/country line from the education or experience
@@ -2247,8 +2313,18 @@ def parse_cv(text: str) -> dict:
             if re.search(r'\d', s):
                 continue
             # Reject long sentences (part of a narrative) — real locations are
-            # at most a city + state/region + country (≤ 6 words).
-            if len(s.split()) > 6:
+            # at most a city + state/region + country (≤ 4 words, e.g.
+            # "Toronto, Ontario, Canada" or "Greater Toronto Area, Canada").
+            if len(s.split()) > 4:
+                continue
+            # Reject sentence fragments ending with a period
+            if s.rstrip().endswith('.') and len(s.split()) > 2:
+                continue
+            # Reject institution/university names (education section lines, not cities)
+            if re.search(
+                r'\b(university|institute|college|school|academy|IIIT|IIT|IIM|MIT|NYU|UCLA|UCL|NTU|NUS)\b',
+                s, re.IGNORECASE
+            ):
                 continue
             # Prefer lines that look like "City, Country" or just "Country"
             if _LOC_CANDIDATE_RE.match(s):
