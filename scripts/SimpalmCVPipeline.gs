@@ -221,6 +221,23 @@ function doGet(e) {
     }
   }
 
+  // ── REMOVE_TRIGGERS ──────────────────────────────────────────────────────
+  // One-shot: deletes all project triggers (stops the "Error code INTERNAL"
+  // failure emails from time-based triggers that were never removed).
+  // Call once: <webapp_url>?action=remove_triggers
+  // After calling, this action can be left in place — it's harmless.
+  if (action === 'remove_triggers') {
+    try {
+      const triggers = ScriptApp.getProjectTriggers();
+      triggers.forEach(t => ScriptApp.deleteTrigger(t));
+      Logger.log(`✅ Removed ${triggers.length} trigger(s). Pipeline is now manual-only.`);
+      return _jsonOut({ ok: true, removed: triggers.length,
+        message: `${triggers.length} trigger(s) deleted. No more automatic runs.` });
+    } catch (err) {
+      return _jsonOut({ ok: false, error: err.message });
+    }
+  }
+
   // ── LIST_INBOX ────────────────────────────────────────────────────────────
   // Returns all raw CV files currently in the Drive folder (processed or not).
   // Used by PalmDeck to populate the "Select CV to process" dropdown immediately
@@ -548,10 +565,14 @@ function cleanupExpiredCVs() {
     // Delete from GitHub: processed/<filename>
     _ghDeleteFile(`processed/${encodeURIComponent(entry.filename)}`, `🗑️ Expired after ${EXPIRY_DAYS}d: ${entry.name}`);
 
-    // Remove from GitHub index.json
-    _ghUpdateIndex(toKeep.concat(driveIndex.filter(e => e !== entry && !toKeep.includes(e))));
-
+    // NOTE: _ghUpdateIndex is called ONCE after the loop (not here) to avoid
+    // intermediate writes that restore already-expired entries.
     count++;
+  }
+
+  // Write the final pruned index to GitHub exactly once, after all deletions
+  if (count > 0) {
+    _ghUpdateIndex(toKeep);
   }
 
   // Write updated Drive index
