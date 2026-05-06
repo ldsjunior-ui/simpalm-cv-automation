@@ -372,8 +372,10 @@ def parse_header(header_text: str) -> dict:
         is_location = (
             any(kw in ll for kw in LOCATION_KEYWORDS)
             and not _CREDENTIAL_LINE_RE.search(line)   # reject "CPA (USA) | CMA (USA"
-            # reject job-description sentences that happen to contain a country name
-            # e.g. "BestBuy Canada architecture to Catch platform." — ends with "." and >3 words
+            # reject job-description sentences that contain a country keyword but are
+            # too long to be an actual location line (e.g. entire work experience block
+            # with "united states" buried inside it, or "BestBuy Canada architecture…")
+            and len(line) <= 80
             and not (line.rstrip().endswith('.') and len(line.split()) > 3)
         )
         if is_location and not location:
