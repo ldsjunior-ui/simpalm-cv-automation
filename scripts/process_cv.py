@@ -372,6 +372,9 @@ def parse_header(header_text: str) -> dict:
         is_location = (
             any(kw in ll for kw in LOCATION_KEYWORDS)
             and not _CREDENTIAL_LINE_RE.search(line)   # reject "CPA (USA) | CMA (USA"
+            # reject job-description sentences that happen to contain a country name
+            # e.g. "BestBuy Canada architecture to Catch platform." — ends with "." and >3 words
+            and not (line.rstrip().endswith('.') and len(line.split()) > 3)
         )
         if is_location and not location:
             location = line
@@ -383,15 +386,17 @@ def parse_header(header_text: str) -> dict:
                 continue  # sentence fragment (e.g. "organizations.", "Inc.")
             if line.strip() == name:
                 continue  # title is just the name again (e.g. European CV format)
-            # Reject lines starting with non-alphanumeric chars (icons, bullets, etc.)
-            if line and not line[0].isalnum():
+            # Reject lines starting with non-alphanumeric chars (icons, bullets, Unicode variants, etc.)
+            # Use regex to catch all Unicode bullet/arrow/symbol variants beyond plain isalnum()
+            if re.match(r'^[^\w]', line.strip()):
                 continue
             # Reject short lines ending with digits — likely a street address or ZIP code
             # (e.g. "Xochicalco 295", "03020 Mexico City")
             if re.search(r'\d+\s*$', line) and len(line) < 40:
                 continue
             if len(line) > 3:
-                title = line
+                # Strip any residual leading bullet/symbol chars before assigning
+                title = re.sub(r'^[^\w]+\s*', '', line).strip() or line.strip()
 
     initials = "".join(w[0].upper() for w in name.split()[:2])
 
