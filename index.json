@@ -537,15 +537,6 @@
     "years_experience": 0
   },
   {
-    "name": "KASHIFA KHAN",
-    "title": "•  Remote",
-    "location": "BestBuy Canada architecture to Catch platform.",
-    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-06T21:46:12Z",
-    "source_file": "inbox/Kashifa Resume.pdf",
-    "years_experience": 8
-  },
-  {
     "name": "Dynamic and accomplished IT professional",
     "title": "604 McDivitt Drive ▪ New Lenox, IL 60451",
     "location": "",
@@ -1444,5 +1435,14 @@
     "processed": "2026-05-06T21:56:34Z",
     "source_file": "inbox/Rajdeep.pdf",
     "years_experience": 0
+  },
+  {
+    "name": "KASHIFA KHAN",
+    "title": "•  Remote",
+    "location": "BestBuy Canada architecture to Catch platform.",
+    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-06T21:57:10Z",
+    "source_file": "inbox/Kashifa Resume.pdf",
+    "years_experience": 8
   }
 ]
