@@ -1428,15 +1428,6 @@
     "years_experience": 0
   },
   {
-    "name": "Candidate",
-    "title": "ly",
-    "location": "",
-    "filename": "Unknown Candidate - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-06T21:50:33Z",
-    "source_file": "inbox/sarahi.pdf",
-    "years_experience": 9
-  },
-  {
     "name": "HARIKA UPPALA",
     "title": "Finance  Manager",
     "location": "",
@@ -1444,5 +1435,14 @@
     "processed": "2026-05-06T21:50:34Z",
     "source_file": "inbox/uppala_harika (1).pdf",
     "years_experience": 6
+  },
+  {
+    "name": "Candidate",
+    "title": "",
+    "location": "WORK EXPERIENCE05-Dec-2022 to 18-Aug-2023Company Name - OpenXcellProject Name - USCCBCompany Name - GrowexxProject Name -Reader.ioUnited States Conference of Catholic Bishop (USCCB) is an organization of catholic bishops. Wewere tasked with developing a mobile application (Flutter) ,a CMS Portal (React) formanagement, and a backend server (Nest Js) to create and monitor church- related activities.My roles were :- Made Architecture Design including tech stack and code flow diagrams as this was greenfield project.Design the Nest Js and FastAPI architecture from scratch.Design and maintain both Relational and Non-Relational Databases.created CMS portal using React Js.Created API’s for both Mobile application and CMS portal.Reader io is a SaaS based platform for extracting information from pdf or images. We can trainthe application for the pdf first and then it will automatically grab information from similar pdfs.My roles were :- Designed the architecture for backend in  Express Js (Typescript) .Dockerized server on AWS EC2 with Auto Scaling and Load Balancing for scalability..Created interactive UI using React Js with Antd Library. wrote unit test using Jest.Integrated Stripe to enable payment processing.Used Agile methodology, actively participating in Scrum ceremonies and managing tasksthrough Jira.Designed and supervised MongoDB Atlas database. 01-Jan-2020 to 30-Nov-2022Company Name - TatvasoftProject Name - Equals Group - PLCI was working on a Project of Equals Group, a UK based company which provides financialservices. It is a forex and banking platform for trading of multiple currencies across variouscountries using various payment methods. I worked as a fullstack developer with react in FE andnode, python in BE. My roles were :-Involved in the design and development of development of new features and functionalitiesusing React for frontend and Node , Typescript, Python ,GraphQl  for with serverlessbackend. Worked with Terraform to handle entire AWS infrastructure.Built and managed microservices leveraging multiple AWS services..Worked with multiple Databases like PostgreSQL and DynamoDBCollaborated closely with on-site clients to design and build the application.20-Nov-2023 to 28-Feb-2025",
+    "filename": "Unknown Candidate - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-06T21:56:34Z",
+    "source_file": "inbox/Rajdeep.pdf",
+    "years_experience": 0
   }
 ]
