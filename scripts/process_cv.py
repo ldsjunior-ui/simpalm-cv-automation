@@ -1933,6 +1933,143 @@ def llm_extract_cv(text: str) -> dict | None:
         return None
 
 
+def llm_extract_cv_openrouter(text: str) -> dict | None:
+    """
+    Use OpenRouter (free models) to extract a complete, structured CV dict
+    from raw text — especially effective for multi-column / printed-to-PDF CVs
+    where column merging produces artifacts (e.g. 'SUMMARYRAJDEEP JADAV').
+
+    Fallback model chain (free tier):
+      1. google/gemini-2.0-flash-exp:free
+      2. meta-llama/llama-3.3-70b-instruct:free
+      3. mistralai/mistral-7b-instruct:free
+
+    Returns a dict in the same shape as parse_cv(), or None on all failures.
+    """
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not api_key:
+        return None
+
+    try:
+        import requests as _req
+    except ImportError:
+        print("   ⚠️  OpenRouter skipped — requests library not installed")
+        return None
+
+    system_prompt = (
+        "You are an expert HR data extractor. The raw CV text you receive may have "
+        "multi-column PDF artifacts: merged words without spaces, missing newlines, "
+        "or section headings concatenated with candidate names "
+        "(e.g. 'SUMMARYRAJDEEP JADAV' means section=SUMMARY, name=Rajdeep Jadav). "
+        "Work experience dates may appear as '05-Dec-2022 to 18-Aug-2023' or "
+        "'Company Name - Acme Corp'. Reconstruct the correct data regardless.\n\n"
+        "Return a single valid JSON object — no prose, no markdown, no code fences.\n"
+        "Schema:\n"
+        '{\n'
+        '  "candidate_name": "string — full name, Title Case",\n'
+        '  "candidate_initials": "string — 2 chars from first+last name",\n'
+        '  "candidate_title": "string — most recent job title only",\n'
+        '  "candidate_email": "string",\n'
+        '  "candidate_phone": "string",\n'
+        '  "candidate_location": "string — city/state/country only (not full address)",\n'
+        '  "candidate_linkedin": "string",\n'
+        '  "summary": "string — 2-4 sentence professional summary",\n'
+        '  "experience": [\n'
+        '    {"role": "string", "company": "string", "period": "string", '
+        '"bullets": ["string (max 6, pick most impactful)"]}\n'
+        '  ],\n'
+        '  "skills": ["string", ...],\n'
+        '  "languages": [{"name": "string", "level": "string", "percent": 0-100}],\n'
+        '  "education": [{"degree": "string", "institution": "string"}],\n'
+        '  "certifications": ["string", ...],\n'
+        '  "projects": [],\n'
+        '  "awards": []\n'
+        '}\n'
+        "Critical rules:\n"
+        "- Extract ALL work experience entries — never omit any role.\n"
+        "- candidate_title must be the most recent role title, never a section heading.\n"
+        "- candidate_location: city + country/state only (e.g. 'Ahmedabad, India') — "
+        "never a full postal address.\n"
+        "- If summary is not in the CV, write a 2-sentence professional summary from context.\n"
+        "- Return ONLY the JSON — no other text whatsoever."
+    )
+
+    models = [
+        "openrouter/free",                            # Auto-route to any available free model
+        "nousresearch/hermes-3-llama-3.1-405b:free",  # 405B — best quality free
+        "meta-llama/llama-3.3-70b-instruct:free",     # 70B — strong fallback
+        "google/gemma-4-31b-it:free",                 # Google free
+        "qwen/qwen3-coder:free",                      # Qwen — good at structured output
+    ]
+
+    import time as _time
+    for i, model in enumerate(models):
+        if i > 0:
+            _time.sleep(8)  # Respect free-tier rate limits between attempts
+        try:
+            resp = _req.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "HTTP-Referer": "https://simpalmstaffing.com",
+                    "X-Title": "Simpalm CV Pipeline",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {
+                            "role": "user",
+                            "content": (
+                                "Extract all CV data from the following text and return as JSON:\n\n"
+                                + text[:8000]
+                            ),
+                        },
+                    ],
+                    "max_tokens": 4096,
+                    "temperature": 0.1,
+                },
+                timeout=45,
+            )
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"].strip()
+            # Strip accidental code fences
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw)
+            data = json.loads(raw)
+
+            # Ensure all required fields exist
+            data.setdefault("candidate_name", "Candidate")
+            data.setdefault("candidate_initials",
+                            "".join(w[0].upper() for w in data["candidate_name"].split()[:2]))
+            data.setdefault("candidate_title", "")
+            data.setdefault("candidate_email", "")
+            data.setdefault("candidate_phone", "")
+            data.setdefault("candidate_location", "")
+            data.setdefault("candidate_linkedin", "")
+            data.setdefault("summary", "")
+            data.setdefault("experience", [])
+            data.setdefault("skills", [])
+            data.setdefault("languages", [])
+            data.setdefault("education", [])
+            data.setdefault("certifications", [])
+            data.setdefault("projects", [])
+            data.setdefault("awards", [])
+            data.setdefault("volunteer", "")
+            data.setdefault("stats", generate_stats(data["experience"], data["languages"]))
+
+            print(f"   🤖 OpenRouter ({model}) extraction used — "
+                  f"{len(data['experience'])} roles found")
+            return data
+
+        except Exception as exc:
+            print(f"   ⚠️  OpenRouter model {model} failed: {exc}")
+            continue
+
+    return None
+
+
 # ── Bullet-section rescue ─────────────────────────────────────────────────────
 #
 # Two CV formats drop section headings into the wrong bucket:
@@ -2266,10 +2403,14 @@ def parse_cv(text: str) -> dict:
 
     # ── LLM fallback: engage when regex extraction is clearly incomplete ──────
     # Trigger when: (a) fewer than 2 experience roles OR parse is clearly
-    # malformed (table-format garbage), AND (b) ANTHROPIC_API_KEY is available.
+    # malformed (table-format garbage), AND (b) any LLM key is available.
+    # Fallback chain: Anthropic (claude-haiku) → OpenRouter (free models).
     # The LLM result replaces the entire parsed dict when it finds more roles.
     if (_experience_is_malformed(experience) or len(experience) < 2) and len(text) > 800:
-        llm_data = llm_extract_cv(text)
+        llm_data = llm_extract_cv(text)  # Anthropic first
+        if not llm_data or len(llm_data.get("experience", [])) <= len(experience):
+            print("   🔄 Anthropic returned insufficient data — trying OpenRouter...")
+            llm_data = llm_extract_cv_openrouter(text)  # OpenRouter fallback
         if llm_data and len(llm_data.get("experience", [])) > len(experience):
             return llm_data
 
