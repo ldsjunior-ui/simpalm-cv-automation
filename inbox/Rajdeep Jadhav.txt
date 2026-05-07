@@ -1,0 +1,97 @@
+SUMMARY
+RAJDEEP JADAV
+rajjadav14@gmail.com | +91-9157098922 | A-11/2 ShantivanColony,Mundra,Kutch,Gujarat,India
+Senior Software Engineer
+I am a senior software developer with 6+ years of experience, specializing in writing clean, efficient, and
+maintainable code within deadlines. I am highly motivated, adaptable, and always eager to learn new
+technologies and skills to deliver impactful and innovative solutions
+EDUCATION
+HSC (Science) - 75.8% 2014-2016
+Adani Public School
+Board - CBSE
+Bachelor of Engineering (BE) -7.29 CGPA 2016-2020
+Aditya Silver Oak Institute Of Technology
+Branch - Computer Engineering
+University - Gujarat Technological University (GTU)
+EDUCATION
+KEY SKILLS
+SSC - 83.6% 2012-2014
+Adani Public School
+Board - CBSE
+Languages :- Javascript (JS) , Typescript (TS) , Python 3 (py)
+Backend Tech :- FastAPI ,Node Js, Express Js, Nest js, GraphQ
+Frontend Tech :- HTML ,CSS , React Js, Next Js, Redux
+Database :- MongoDB , PostgreSQL, MySQL , DynamoDB
+Cloud :- AWS , Kubernetes, Helm Charts , Serverless, Terraform , Microservice ,CI/CD , Github
+Actions
+AWS :- VPC, EC2, S3, Lambda, DynamoDB, RDS, ECS, Fargate, API Gateway , ELB, Cloudwatch,
+Cloudfront, IAM ,EFS and more.
+Miscellaneous :- Docker , Redis, Stripe, Grafana k6 , Apigee X , RabbitMQ , Microsoft EntraId ,
+Datadog ,OpenAPI ,OAuth2, JWT, pytest, Jest
+AI Tools :- Github Copilot, Cursor , Claude code
+WORK EXPERIENCE
+05-Dec-2022 to 18-Aug-2023
+Company Name - OpenXcell
+Project Name - USCCB
+Company Name - Growexx
+Project Name -Reader.io
+United States Conference of Catholic Bishop (USCCB) is an organization of catholic bishops. We
+were tasked with developing a mobile application (Flutter) ,a CMS Portal (React) for
+management, and a backend server (Nest Js) to create and monitor church- related activities.
+My roles were :-
+Made Architecture Design including tech stack and code flow diagrams as this was green
+field project.
+Design the Nest Js and FastAPI architecture from scratch.
+Design and maintain both Relational and Non-Relational Databases.
+created CMS portal using React Js.
+Created API’s for both Mobile application and CMS portal.
+Reader io is a SaaS based platform for extracting information from pdf or images. We can train
+the application for the pdf first and then it will automatically grab information from similar pdfs.
+My roles were :-
+Designed the architecture for backend in Express Js (Typescript) .
+Dockerized server on AWS EC2 with Auto Scaling and Load Balancing for scalability..
+Created interactive UI using React Js with Antd Library. wrote unit test using Jest.
+Integrated Stripe to enable payment processing.
+Used Agile methodology, actively participating in Scrum ceremonies and managing tasks
+through Jira.
+Designed and supervised MongoDB Atlas database.
+Company Name - Tatvasoft 01-Jan-2020 to 30-Nov-2022
+Project Name - Equals Group - PLC
+I was working on a Project of Equals Group, a UK based company which provides financial
+services. It is a forex and banking platform for trading of multiple currencies across various
+countries using various payment methods. I worked as a fullstack developer with react in FE and
+node, python in BE. My roles were :-
+Involved in the design and development of development of new features and functionalities
+using React for frontend and Node , Typescript, Python ,GraphQl for with serverless
+backend.
+Worked with Terraform to handle entire AWS infrastructure.
+Built and managed microservices leveraging multiple AWS services..
+Worked with multiple Databases like PostgreSQL and DynamoDB
+Collaborated closely with on-site clients to design and build the application.
+20-Nov-2023 to 28-Feb-2025
+Company Name - FunicTech
+Project Name - Cognizant-Liberty Mutual (Contractor)
+Working as Contractor with Liberty Mutual. Created , updated, upgraded and maintained
+geospatial API’s.Worked with onshore team ,clients and vendors to maintain API’s.
+My roles were :-
+Maintaining and Updating Backend APIs Connect with client daily for scrum call.
+Worked with aws-cdk-lib and boto3 to maintain entire AWS infrastructure.
+Helped with AWS ECS migration to Kubernetes with Helm Charts.
+Created Lambda functions in Python, Node and Java.
+Created UI in React Js.
+worked extensively with AWS infrastructure.
+Implemented dataload workflow using Event Driven architecture and made the dataload
+fault tolerant
+Added new services from scratch, which used Microsoft EntraID for auth, ApigeeX from API
+management, Datadog for logging and AWS lambda for computation.
+Implemented CI/CD pipleline using Github Actions.
+Tested and updated the DR environments.
+03-March-2025 to 03-April-2026
+Languages
+English
+Hindi
+Gujarati
+Hobbies
+Reading Books
+Badminton
+Listening music
