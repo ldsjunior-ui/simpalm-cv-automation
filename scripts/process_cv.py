@@ -1838,7 +1838,7 @@ def generate_stats(experience: list, languages: list) -> list:
 
 # ── LLM-based Extraction Fallback ────────────────────────────────────────────
 
-def llm_extract_cv(text: str) -> dict | None:
+def llm_extract_cv(text: str, max_tokens: int = 4096) -> dict | None:
     """
     Use Claude API (claude-3-haiku) to extract a complete, structured CV dict
     from raw text.  Only called when:
@@ -1890,7 +1890,7 @@ def llm_extract_cv(text: str) -> dict | None:
 
         response = client.messages.create(
             model="claude-haiku-4-5",
-            max_tokens=4096,
+            max_tokens=max_tokens,
             messages=[
                 {
                     "role": "user",
@@ -2521,6 +2521,7 @@ def update_index(data: dict, pdf_filename: str, source_path: str = ""):
         "location":  data["candidate_location"],
         "filename":  pdf_filename,
         "processed": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "skills":    data.get("skills", [])[:12],
     }
     # Store the original inbox path so the frontend can selectively re-trigger this CV
     if source_path:
@@ -2561,12 +2562,23 @@ def main():
 
     print(f"📄 Processing: {cv_path}")
 
+    ext = Path(cv_path).suffix.lower()
+
     # 1. Extract text
     text = extract_text(cv_path)
     print(f"   Extracted {len(text)} characters")
 
     # 2. Parse structured data
-    data = parse_cv(text)
+    # .txt fast path: skip regex pipeline — plain text is already clean,
+    # LLM extracts faster and more accurately. max_tokens=2048 is enough.
+    if ext in ('.txt', '.text'):
+        print("   ⚡ Plain-text mode: direct LLM extraction (skipping regex pipeline)")
+        data = llm_extract_cv(text, max_tokens=2048)
+        if not data:
+            print("   ⚠️  LLM unavailable — falling back to regex parser")
+            data = parse_cv(text)
+    else:
+        data = parse_cv(text)
     print(f"   Candidate:      {data['candidate_name']}")
     print(f"   Title:          {data['candidate_title']}")
     print(f"   Skills:         {len(data['skills'])}")
