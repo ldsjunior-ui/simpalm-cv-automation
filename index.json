@@ -1444,5 +1444,23 @@
     "processed": "2026-05-06T21:57:10Z",
     "source_file": "inbox/Kashifa Resume.pdf",
     "years_experience": 8
+  },
+  {
+    "name": "Rajdeep Jadav",
+    "title": "Contractor - Geospatial API Developer",
+    "location": "Mundra, Gujarat, India",
+    "filename": "Rajdeep Jadav - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-07T17:38:31Z",
+    "source_file": "inbox/Rajdeep Jadhav.txt",
+    "years_experience": 7
+  },
+  {
+    "name": "Tanmay Banerjee",
+    "title": "Sr. Software Developer (Full Stack - Backend - Web Development)",
+    "location": "",
+    "filename": "Tanmay Banerjee - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-07T17:39:48Z",
+    "source_file": "inbox/TANMAY BANERJEE.txt",
+    "years_experience": 7
   }
 ]
