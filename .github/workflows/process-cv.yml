@@ -73,7 +73,7 @@ jobs:
             echo "$DISPATCH_FILES" | tr '|' '\n' > /tmp/new_cvs.txt
           elif [ "$PARSER_CHANGED" -gt 0 ] || [ "$MANUAL_DISPATCH" = "true" ]; then
             echo "Parser changed or manual dispatch — reprocessing ALL inbox CVs"
-            find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
+            find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" -o -name "*.txt" \) \
               | sort > /tmp/new_cvs.txt || true
           else
             # Files changed in the triggering push
@@ -82,7 +82,7 @@ jobs:
 
             # Fallback: if diff is empty, collect all inbox PDFs/DOCXs
             if [ ! -s /tmp/new_cvs.txt ]; then
-              find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" \) \
+              find inbox -type f \( -name "*.pdf" -o -name "*.docx" -o -name "*.doc" -o -name "*.txt" \) \
                 | sort > /tmp/new_cvs.txt || true
             fi
           fi
