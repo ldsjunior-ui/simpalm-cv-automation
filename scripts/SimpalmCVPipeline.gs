@@ -38,7 +38,7 @@ const PROC_FOLDER_NAME = '✅ Processed CVs';
 const INDEX_FILE_NAME  = 'palmdeck-index.json';
 const PUSHED_KEY       = 'pushed_files_v2';
 const SYNCED_KEY       = 'synced_files_v2';
-const EXPIRY_DAYS      = 21;   // CVs older than this are automatically purged
+const EXPIRY_DAYS      = 1;    // CVs older than this are automatically purged (24h policy)
 
 const VALID_MIME_TYPES = [
   'application/pdf',
