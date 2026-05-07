@@ -1,0 +1,161 @@
+KASHIFA KHAN
+Senior Full-Stack Engineer • AI/ML Specialist • Cloud Architect
+📧 khankashifa.1996@gmail.com | 📧 +91 6386365655 | 📧 linkedin.com/in/kashifa-khan-520102127 | 📧
+github.com/kashifakhan1996
+PROFESSIONAL SUMMARY
+Results-driven Full-Stack Engineer with 7.5+ years of experience architecting and delivering scalable web applications,
+REST/GraphQL APIs, and cloud-native solutions. 5+ years of hands-on AI/GenAI development experience spanning
+LLM integrations, RAG pipelines, and AI-powered products. Proven track record leading cross-functional teams,
+managing end-to-end SDLC, and deploying 10+ production-grade applications across AWS, Node.js, Python, React.js,
+and TypeScript stacks. PG Diploma in AI & ML from IIIT Bangalore.
+TECHNICAL SKILLS
+AI / Gen AI (5+ yrs) LangChain, OpenAI GPT-4, RAG Pipelines, Pinecone, Vector DBs, Prompt
+Engineering, AI Agents, Hugging Face, Embeddings, LLM Fine-tuning
+Languages JavaScript ES6+ (7.5 yrs), TypeScript (5 yrs), Python (5 yrs), PHP (5 yrs)
+Frontend React.js (7 yrs), Next.js (4 yrs), React Native (5 yrs), Tailwind CSS, Material UI,
+Bootstrap, jQuery
+Backend Node.js (7 yrs), Nest.js (4 yrs), Express.js (6 yrs), HapiJS, Django, Laravel, Yii2,
+GraphQL, REST API
+Databases MongoDB (6.5 yrs), MySQL (6 yrs), PostgreSQL, DynamoDB, Firebase, Redis
+Cloud & DevOps AWS (Lambda, EC2, ECR, S3, CloudWatch, App Sync, API Gateway, Amazon
+Connect) (4.5 yrs), Docker, Kubernetes, CI/CD, GitHub Actions
+Tools & Practices Agile / Scrum, Jira, Git, GitLab, Bitbucket, Microservices, Shopify, RabbitMQ,
+TDD, Code Review
+PROFESSIONAL EXPERIENCE
+Full-Stack Technical Lead | Kairos Technology Jan 2025 – Present • Remote
+BPme Loyalty Core Service (BP Global — Millions of Users)
+▸ Spearheading development of BPme Rewards loyalty platform serving millions of users across multiple
+geographies; features include personalized offers, digital fuel payments, and real-time reward tracking.
+▸ Architected scalable API integrations with payment gateways and loyalty platforms, reducing transaction latency
+by 30%.
+▸ Led security optimization and performance tuning ensuring seamless loyalty point accrual and redemption at
+scale.
+▸ Conducted usability testing cycles; improvements drove measurable uplift in customer satisfaction scores.
+▸ Tech: Node.js, React.js, TypeScript, AWS, DynamoDB, GraphQL, Docker, Kubernetes, Agile/Jira
+Senior Full-Stack & Cloud Developer | Blazeclan Technology Pvt Ltd Jun 2022 – Jun 2024 • Pune
+Bolttech Malaysia — World's Largest Insurance Exchange Platform
+▸ Built agent desktop interface for customer service operations on AWS Connect, enabling real-time policy
+management for insurance distributors across Asia.
+▸ Designed and implemented GraphQL APIs consumed by React.js front-end, cutting data over-fetching by 40%.
+▸ Developed MERN + Python neural network application (Cashify-like) for used mobile price prediction using ML
+regression models.
+▸ Tech: React.js, Node.js, TypeScript, AWS (Lambda, DynamoDB, App Sync, CloudWatch, Amazon Connect),
+GraphQL, Docker, Kubernetes
+Senior Full-Stack Engineer | Tatvic Analytics Jun 2021 – Jun 2022 • Ahmedabad (WFH)
+Shopify–Google/Facebook Integration Application
+▸ Founded and led a dedicated Shopify + Google plugin development team from ground zero.
+▸ Built Google Merchant Center ↔ Shopify sync for products, orders, inventory, and locations; integrated Google
+Ads Campaigns & PMax management APIs.
+▸ Architected React app with hooks/functional components achieving 2× performance improvement; applied OOP
+patterns to reduce codebase by 50%.
+▸ Implemented Shopify webhook queue management (RabbitMQ) for high-reliability order sync.
+▸ Tech: Node.js, React.js, Next.js, MongoDB, MySQL, GraphQL, AWS, TypeScript, Docker, Kubernetes
+Senior Full-Stack Developer | Cedcoss Technologies May 2017 – Jun 2021
+E-Commerce Marketplace Integration Platform (7+ apps)
+▸ Led a team of 15+ developers building marketplace integration apps for BestBuy Canada, Walmart Canada,
+Etsy, Catch, OnBuy — serving 5K+ active users.
+▸ Designed one-click product import from Shopify to marketplace platforms and real-time order/inventory sync
+engines.
+▸ Applied TDD, peer reviews, and clean code practices; enforced non-redundant architecture standards across all
+projects.
+▸ Tech: PHP, Yii2, Node.js, React.js, MongoDB, MySQL, Shopify APIs, AWS Lambda, GraphQL, Docker
+KEY PROJECTS
+Medical Chatbot — Generative AI (RAG-based) 2025
+Tech Stack: Python, LangChain, Flask, GPT-4, Pinecone, AWS ECR/EC2, Docker, GitHub Actions
+▸ Built end-to-end AI medical chatbot using Retrieval-Augmented Generation (RAG); ingested medical documents
+into Pinecone vector DB for semantic search-powered Q&A via GPT-4.
+▸ Full CI/CD pipeline: GitHub Actions → Docker image build → AWS ECR → EC2 deployment with zero-downtime
+releases.
+▸ GitHub: github.com/kashifakhan1996/Medical-Chatbot-Generative-AI
+AI Resume Parser — NLP Extraction Engine 2025
+Tech Stack: Python, LangChain, GPT-4, SpaCy, Flask, React.js, MongoDB
+▸ Intelligent resume parsing system extracting structured data (skills, experience, education, contacts) from
+PDF/DOCX resumes using LLM-based NER and GPT-4 prompts.
+▸ Achieved 92%+ extraction accuracy; REST API consumed by React.js HR dashboard with bulk upload, skills
+gap analysis, and ATS candidate ranking.
+Product Quality Prediction Model (Wine Quality ML) 2024
+Tech Stack: Python, LangChain, Flask, GPT, Pinecone, AWS ECR/EC2, Docker, GitHub Actions
+▸ End-to-end ML pipeline for product quality prediction; trained regression model with feature engineering,
+deployed as Flask REST API on AWS.
+▸ AWS CI/CD via GitHub Actions → Docker → ECR → EC2 with automated rollback on test failure.
+▸ GitHub: github.com/kashifakhan1996/End-To-End-Wine-Quality
+BPme Loyalty Core Service — BP Global 2025–Present
+Tech Stack: Node.js, React.js, TypeScript, AWS, DynamoDB, GraphQL, Docker, Kubernetes
+▸ Loyalty and payments platform for BP serving millions of users; personalized offers, digital fuel payments, and
+real-time reward tracking across multiple geographies.
+▸ Implemented scalable API integrations with payment systems and loyalty platforms, improving transaction speed
+by 30%.
+Bolttech Agent Desktop — Insurance Exchange Platform 2022–2024
+Tech Stack: React.js, Node.js, TypeScript, DynamoDB, GraphQL, AWS Connect, Lambda, CloudWatch, Docker
+▸ Built agent desktop for the world's largest insurance exchange (Bolttech Malaysia) connecting providers,
+distributors, and customers across APAC.
+▸ Developed GraphQL APIs and React.js front-end for real-time policy management; reduced data over-fetching
+by 40%.
+BestBuy Canada — Shopify Integration App 2018–2019
+Tech Stack: Node.js, React.js, MongoDB, GraphQL, AWS, TypeScript, Shopify APIs
+▸ Launched integration app with 5,000+ active users; real-time product, order, and inventory sync between Shopify
+and BestBuy CA marketplace.
+▸ Built one-click product import feature; extended same architecture for Catch–Shopify integration.
+▸ Applied OOP patterns in Express & React utils, cutting codebase size by 50% and improving maintainability.
+Facebook & Google Feed — Shopify Integration App 2021–2022
+Tech Stack: Node.js, React.js, Next.js, MongoDB, MySQL, GraphQL, AWS, TypeScript, Docker, Kubernetes
+▸ Built Shopify–Google/Facebook integration app enabling full product, order, inventory, and location sync across
+platforms.
+▸ Developed Node.js APIs and full-stack Shopify apps; managed end-to-end SDLC including reporting,
+troubleshooting, and live project management.
+▸ Collaborated directly with clients to deliver custom features and performance improvements.
+Local Dekho — Service Booking Application 2021
+Tech Stack: React.js, Node.js, MongoDB, GraphQL, Next.js, Express, TypeScript, AWS, Firebase, Google Maps API
+▸ Built hyperlocal service booking platform connecting users with nearby helpers (plumbers, electricians, etc.)
+using location-based filtering.
+▸ Implemented Firebase mobile number OTP login, React hooks/polling for real-time notifications, and Google
+Maps APIs for geo-based service discovery.
+▸ Live: localdekho.netlify.app
+Real Real Estate — Property Listing Platform 2020
+Tech Stack: React.js, Node.js, MongoDB, GraphQL, Next.js, Express, TypeScript, AWS
+▸ Built full-featured real estate platform with admin panel for property/category/location management, analytics
+dashboard, and advanced property search & filter.
+▸ Implemented property detail pages, agent property upload sections, and social media sharing across multiple
+platforms.
+▸ Live: realrealestate.in
+Savings Tracker — Personal Finance Application 2021–2022
+Tech Stack: React.js, Node.js, DynamoDB, GraphQL, TypeScript, AWS, Docker, Kubernetes
+▸ Developed full-stack savings and expense tracker with visual analytics (charts/graphs) showing expenses vs.
+savings over time.
+▸ Deployed on AWS with serverless architecture; real-time data sync via GraphQL subscriptions.
+▸ Live: savings-tracker-111.netlify.app
+Price Prediction — Used Mobile Phones 2023–2024
+Tech Stack: Python, MERN Stack, Neural Network, Machine Learning, AWS
+▸ Built Cashify-like web application that predicts resale price of used mobile phones based on device
+specifications using a trained neural network model.
+▸ End-to-end pipeline from data ingestion to model training (regression), REST API serving, and React.js frontend
+for user interaction.
+Walmart Canada — Shopify Integration App 2018
+Tech Stack: PHP, Yii2, Node.js, React.js, MySQL, MongoDB, Shopify APIs, AWS Lambda
+▸ Developed Walmart Canada marketplace integration enabling sellers to sync Shopify catalogue, manage orders,
+and update inventory in real time.
+OnBuy — Marketplace Integration App 2017–2018
+Tech Stack: PHP, Yii2, Node.js, React.js, MySQL, MongoDB, Shopify APIs
+▸ Built OnBuy UK marketplace integration app; handled product listing, order management, and inventory sync
+between Shopify and OnBuy platform.
+Catch — Marketplace Integration App 2019–2020
+Tech Stack: Node.js, React.js, MongoDB, GraphQL, AWS, TypeScript, Shopify APIs
+▸ Developed Catch.com.au (Australia) marketplace integration; extended one-click product import feature from
+BestBuy Canada architecture to Catch platform.
+Etsy — Ecommerce Integration App 2020–2021
+Tech Stack: Node.js, React.js, MongoDB, GraphQL, AWS, TypeScript, Shopify APIs
+▸ Built Etsy–Shopify integration enabling sellers to manage listings, sync orders, and automate inventory updates
+between both platforms.
+EDUCATION
+PG Diploma — Artificial Intelligence & Machine Learning 2023 – 2025
+IIIT Bangalore
+B.Tech — Information Technology 2013 – 2017
+Uttar Pradesh Technical University • First Class (81%)
+CERTIFICATIONS
+✅ Google Project Manager (Professional Certificate)
+✅ AWS for Professionals
+✅ Python Advanced & Basics
+✅ Google Analytics Basic & Advanced
+✅ Google Analytics 360 & Data Studio
+LANGUAGES
+English (Professional Working Proficiency) Hindi (Native)
