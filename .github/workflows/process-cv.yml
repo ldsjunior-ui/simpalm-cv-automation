@@ -96,6 +96,7 @@ jobs:
         if: steps.detect.outputs.count > 0
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           FAILED=0
           while IFS= read -r cv_file; do
