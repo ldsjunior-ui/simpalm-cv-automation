@@ -113,6 +113,10 @@ def extract_text(path: str) -> str:
         return extract_text_pdf(path)
     elif ext in (".docx", ".doc"):
         return extract_text_docx(path)
+    elif ext in (".txt", ".text"):
+        # Plain-text note format — read directly, no extraction needed
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            return fh.read()
     else:
         raise ValueError(f"Unsupported file type: {ext}")
 
