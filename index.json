@@ -1446,29 +1446,6 @@
     "years_experience": 7
   },
   {
-    "name": "KASHIFA KHAN",
-    "title": "Full-Stack Technical Lead",
-    "location": "",
-    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-07T17:46:30Z",
-    "skills": [
-      "AI / Gen AI",
-      "5+ yrs",
-      "LangChain",
-      "OpenAI GPT-4",
-      "RAG Pipelines",
-      "Pinecone",
-      "Vector DBs",
-      "Prompt",
-      "Engineering",
-      "AI Agents",
-      "Hugging Face",
-      "Embeddings"
-    ],
-    "source_file": "inbox/KASHIFA KHAN.txt",
-    "years_experience": 8
-  },
-  {
     "name": "Rajdeep Jadav",
     "title": "Senior Software Engineer",
     "location": "Mundra, India",
@@ -1513,5 +1490,28 @@
     ],
     "source_file": "inbox/TANMAY BANERJEE.txt",
     "years_experience": 0
+  },
+  {
+    "name": "KASHIFA KHAN",
+    "title": "Full-Stack Technical Lead",
+    "location": "",
+    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-07T17:48:30Z",
+    "skills": [
+      "AI / Gen AI",
+      "5+ yrs",
+      "LangChain",
+      "OpenAI GPT-4",
+      "RAG Pipelines",
+      "Pinecone",
+      "Vector DBs",
+      "Prompt",
+      "Engineering",
+      "AI Agents",
+      "Hugging Face",
+      "Embeddings"
+    ],
+    "source_file": "inbox/KASHIFA KHAN.txt",
+    "years_experience": 8
   }
 ]
