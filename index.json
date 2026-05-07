@@ -1437,24 +1437,6 @@
     "years_experience": 0
   },
   {
-    "name": "KASHIFA KHAN",
-    "title": "Full-Stack Technical Lead",
-    "location": "",
-    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-07T17:42:03Z",
-    "source_file": "inbox/KASHIFA KHAN.txt",
-    "years_experience": 8
-  },
-  {
-    "name": "Rajdeep Jadav",
-    "title": "Senior Software Engineer",
-    "location": "Mundra, Gujarat, India",
-    "filename": "Rajdeep Jadav - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-07T17:42:14Z",
-    "source_file": "inbox/Rajdeep Jadhav.txt",
-    "years_experience": 5
-  },
-  {
     "name": "Tanmay Banerjee",
     "title": "Sr. Software Developer (Full Stack - Backend - Web Development)",
     "location": "",
@@ -1462,5 +1444,74 @@
     "processed": "2026-05-07T17:45:57Z",
     "source_file": "inbox/TANMAY BANERJEE.txt",
     "years_experience": 7
+  },
+  {
+    "name": "KASHIFA KHAN",
+    "title": "Full-Stack Technical Lead",
+    "location": "",
+    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-07T17:46:30Z",
+    "skills": [
+      "AI / Gen AI",
+      "5+ yrs",
+      "LangChain",
+      "OpenAI GPT-4",
+      "RAG Pipelines",
+      "Pinecone",
+      "Vector DBs",
+      "Prompt",
+      "Engineering",
+      "AI Agents",
+      "Hugging Face",
+      "Embeddings"
+    ],
+    "source_file": "inbox/KASHIFA KHAN.txt",
+    "years_experience": 8
+  },
+  {
+    "name": "Rajdeep Jadav",
+    "title": "Senior Software Engineer",
+    "location": "Mundra, India",
+    "filename": "Rajdeep Jadav - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-07T17:46:52Z",
+    "skills": [
+      "JavaScript",
+      "TypeScript",
+      "Python",
+      "FastAPI",
+      "Node.js",
+      "Express.js",
+      "Nest.js",
+      "GraphQL",
+      "React.js",
+      "Next.js",
+      "Redux",
+      "HTML"
+    ],
+    "source_file": "inbox/Rajdeep Jadhav.txt",
+    "years_experience": 6
+  },
+  {
+    "name": "anerjee-23rd",
+    "title": "",
+    "location": "",
+    "filename": "anerjee-23rd - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-07T17:47:45Z",
+    "skills": [
+      "Front-end Development: React.js",
+      "Nextjs",
+      "Redux",
+      "JavaScript",
+      "ES6+",
+      "TypeScript",
+      "HTML5",
+      "CSS3",
+      "WebPack",
+      "Back-end Development: Node.js",
+      "Nest.Js Express.js",
+      "Java"
+    ],
+    "source_file": "inbox/TANMAY BANERJEE.txt",
+    "years_experience": 0
   }
 ]
