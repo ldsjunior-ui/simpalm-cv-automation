@@ -38,12 +38,14 @@ const PROC_FOLDER_NAME = '✅ Processed CVs';
 const INDEX_FILE_NAME  = 'palmdeck-index.json';
 const PUSHED_KEY       = 'pushed_files_v2';
 const SYNCED_KEY       = 'synced_files_v2';
-const EXPIRY_DAYS      = 1;    // CVs older than this are automatically purged (24h policy)
+const EXPIRY_DAYS      = 21;   // CVs older than this are automatically purged
 
 const VALID_MIME_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
+  'text/plain',                    // plain-text note format (new workflow 2026-05)
+  'application/vnd.google-apps.document',  // Google Doc (exported as text)
 ];
 
 function getToken() {
@@ -238,11 +240,11 @@ function doGet(e) {
     }
   }
 
-  // ── LIST_INBOX ────────────────────────────────────────────────────────────
+  // ── LIST_INBOX / SCAN_DRIVE ───────────────────────────────────────────────
   // Returns all raw CV files currently in the Drive folder (processed or not).
-  // Used by PalmDeck to populate the "Select CV to process" dropdown immediately
-  // after a file is dropped in the folder — before any processing happens.
-  if (action === 'list_inbox') {
+  // scan_drive = alias called by PalmDeck Refresh button (display-only, no GitHub push).
+  // list_inbox = same, used by older callers.
+  if (action === 'list_inbox' || action === 'scan_drive') {
     try {
       const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
       const files  = folder.getFiles();
