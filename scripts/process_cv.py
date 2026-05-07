@@ -1885,6 +1885,14 @@ def llm_extract_cv(text: str, max_tokens: int = 4096) -> dict | None:
             "and 'Client' as the company.\n"
             "- Include up to 6 bullet points per role (pick the most impactful ones).\n"
             "- If no summary exists in the CV, leave the summary field as an empty string.\n"
+            "- For skills: extract specific technology/tool/framework/language names only "
+            "(e.g. 'React.js', 'Python', 'Docker', 'AWS'). Do NOT include: experience year "
+            "markers ('5+ yrs', '3 years'), category headers ('Frontend', 'Backend', 'Languages'), "
+            "or vague descriptors ('proficient', 'expert'). If a skill name spans multiple "
+            "lines, join it into one item. Limit to 20 most relevant technical skills.\n"
+            "- For candidate_location: extract city/country only (e.g. 'Bangalore, India'). "
+            "If only 'Remote' is listed, use 'Remote'. Never use full sentences.\n"
+            "- Sort experience entries most-recent-first by start date.\n"
             "- Return ONLY the JSON object — no other text."
         )
 
@@ -1992,9 +2000,14 @@ def llm_extract_cv_openrouter(text: str) -> dict | None:
         "Critical rules:\n"
         "- Extract ALL work experience entries — never omit any role.\n"
         "- candidate_title must be the most recent role title, never a section heading.\n"
-        "- candidate_location: city + country/state only (e.g. 'Ahmedabad, India') — "
-        "never a full postal address.\n"
+        "- candidate_location: city + country/state only (e.g. 'Ahmedabad, India'). "
+        "If only 'Remote' is listed, use 'Remote'. Never use full sentences.\n"
         "- If summary is not in the CV, write a 2-sentence professional summary from context.\n"
+        "- For skills: extract specific technology/tool/framework/language names only "
+        "(e.g. 'React.js', 'Python', 'Docker'). Do NOT include: year markers ('5+ yrs'), "
+        "category headers ('Frontend', 'Backend'), or vague descriptors. "
+        "Join multi-line skill names into one item. Limit to 20 most relevant.\n"
+        "- Sort experience entries most-recent-first by start date.\n"
         "- Return ONLY the JSON — no other text whatsoever."
     )
 
