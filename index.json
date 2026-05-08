@@ -573,15 +573,6 @@
     "years_experience": 0
   },
   {
-    "name": "LILIAN DOUMEN",
-    "title": "McKinsey · Company · Senior Bilingual Executive Assistant",
-    "location": "São Paulo, Brazil",
-    "filename": "LILIAN DOUMEN - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-06T21:46:24Z",
-    "source_file": "inbox/Lilian Martins.pdf",
-    "years_experience": 19
-  },
-  {
     "name": "Lucia Lozita",
     "title": "Altman Advisors",
     "location": "",
@@ -1605,5 +1596,28 @@
     ],
     "source_file": "inbox/Ietta Paula resume 2026 SIMPALM.pdf",
     "years_experience": 7
+  },
+  {
+    "name": "LILIAN DOUMEN",
+    "title": "VIRTUAL ASSISTANT | ADMINISTRATIVE ASSISTANT",
+    "location": "JATO DYNAMICS DO BRASIL",
+    "filename": "LILIAN DOUMEN - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-08T19:34:44Z",
+    "skills": [
+      "Executive & Administrative Support",
+      "Calendar & Travel Management",
+      "Expense & Reimbursement Control",
+      "Financial Reporting & Budget Tracking",
+      "Event Planning & Meeting Coordination",
+      "CRM",
+      "SAP",
+      "MS Office",
+      "Google Suite",
+      "SharePoint",
+      "Bilingual",
+      "Portuguese & English"
+    ],
+    "source_file": "inbox/Lilian Doumen  - Simpalm.pdf",
+    "years_experience": 18
   }
 ]
