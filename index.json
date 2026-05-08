@@ -1311,15 +1311,6 @@
     "years_experience": 0
   },
   {
-    "name": "Iracy Gomes",
-    "title": "level executives, Board Members, and expatriates across diverse industries. Highly skilled in all",
-    "location": "BRAZILIAN  AND PORTUGUESE  CITIZENSHIP",
-    "filename": "Iracy Gomes - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-06T21:50:00Z",
-    "source_file": "inbox/iracy.pdf",
-    "years_experience": 9
-  },
-  {
     "name": "JUAN DIEGO GUTIERREZ",
     "title": "",
     "location": "Cardenales de Lara, BBC. Venezuela",
@@ -1428,24 +1419,6 @@
     "years_experience": 6
   },
   {
-    "name": "Candidate",
-    "title": "",
-    "location": "WORK EXPERIENCE05-Dec-2022 to 18-Aug-2023Company Name - OpenXcellProject Name - USCCBCompany Name - GrowexxProject Name -Reader.ioUnited States Conference of Catholic Bishop (USCCB) is an organization of catholic bishops. Wewere tasked with developing a mobile application (Flutter) ,a CMS Portal (React) formanagement, and a backend server (Nest Js) to create and monitor church- related activities.My roles were :- Made Architecture Design including tech stack and code flow diagrams as this was greenfield project.Design the Nest Js and FastAPI architecture from scratch.Design and maintain both Relational and Non-Relational Databases.created CMS portal using React Js.Created API’s for both Mobile application and CMS portal.Reader io is a SaaS based platform for extracting information from pdf or images. We can trainthe application for the pdf first and then it will automatically grab information from similar pdfs.My roles were :- Designed the architecture for backend in  Express Js (Typescript) .Dockerized server on AWS EC2 with Auto Scaling and Load Balancing for scalability..Created interactive UI using React Js with Antd Library. wrote unit test using Jest.Integrated Stripe to enable payment processing.Used Agile methodology, actively participating in Scrum ceremonies and managing tasksthrough Jira.Designed and supervised MongoDB Atlas database. 01-Jan-2020 to 30-Nov-2022Company Name - TatvasoftProject Name - Equals Group - PLCI was working on a Project of Equals Group, a UK based company which provides financialservices. It is a forex and banking platform for trading of multiple currencies across variouscountries using various payment methods. I worked as a fullstack developer with react in FE andnode, python in BE. My roles were :-Involved in the design and development of development of new features and functionalitiesusing React for frontend and Node , Typescript, Python ,GraphQl  for with serverlessbackend. Worked with Terraform to handle entire AWS infrastructure.Built and managed microservices leveraging multiple AWS services..Worked with multiple Databases like PostgreSQL and DynamoDBCollaborated closely with on-site clients to design and build the application.20-Nov-2023 to 28-Feb-2025",
-    "filename": "Unknown Candidate - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-06T21:56:34Z",
-    "source_file": "inbox/Rajdeep.pdf",
-    "years_experience": 0
-  },
-  {
-    "name": "Tanmay Banerjee",
-    "title": "Sr. Software Developer (Full Stack - Backend - Web Development)",
-    "location": "",
-    "filename": "Tanmay Banerjee - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-07T17:45:57Z",
-    "source_file": "inbox/TANMAY BANERJEE.txt",
-    "years_experience": 7
-  },
-  {
     "name": "Rajdeep Jadav",
     "title": "Senior Software Engineer",
     "location": "Mundra, Gujarat, India",
@@ -1492,11 +1465,67 @@
     "years_experience": 0
   },
   {
+    "name": "ANDREA C. SANTANDER VITOLA",
+    "title": "Bilingual: English (Full Professional Proficiency) – Spanish (Native)",
+    "location": "Cartagena, Colombia",
+    "filename": "ANDREA C SANTANDER VITOLA - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-08T19:12:40Z",
+    "skills": [
+      "Virtual Administrative Support",
+      "Calendar & Schedule Management",
+      "Customer Service & Client Communication",
+      "Reservation & Booking Coordination",
+      "Email & Inbox Management",
+      "Phone Support & Call Handling",
+      "Multitasking & Time Management",
+      "Problem Solving & Conflict Resolution",
+      "Operations Coordination",
+      "Microsoft Office & Digital Tools",
+      "Bilingual Communication",
+      "English/Spanish"
+    ],
+    "source_file": "inbox/Andrea_Santander_Virtual_Assistant_Restaurant.docx",
+    "years_experience": 11
+  },
+  {
+    "name": "Iracy Gomes",
+    "title": "Video Introduction",
+    "location": "BRAZILIAN AND PORTUGUESE CITIZENSHIP",
+    "filename": "Iracy Gomes - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-08T19:12:43Z",
+    "skills": [
+      "Calendar Management",
+      "Administrative Support",
+      "Strategic Planning and Project Management",
+      "Marketing Plan Social Media",
+      "Linkedin Sales Navigator",
+      "Content Creator for Linkedin",
+      "Website Creation via SquareSpace",
+      "Notion Internal Page Creation",
+      "Operational Management",
+      "Employer Branding",
+      "Employee Experience",
+      "Performance Management"
+    ],
+    "source_file": "inbox/Iracy_Gomes_docx.pdf",
+    "years_experience": 12
+  },
+  {
+    "name": "JASMIN",
+    "title": "US TAX PREPARATOR I ACCOUNTANT",
+    "location": "Vodafone India Pvt Ltd",
+    "filename": "JASMIN - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-08T19:12:45Z",
+    "skills": [],
+    "source_file": "inbox/Jasmin Patel Simpalm.pdf",
+    "years_experience": 11
+  },
+  {
     "name": "KASHIFA KHAN",
     "title": "Full-Stack Technical Lead",
     "location": "",
     "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-07T17:54:45Z",
+    "processed": "2026-05-08T19:12:48Z",
     "skills": [
       "AI / Gen AI",
       "5+ yrs",
@@ -1515,46 +1544,46 @@
     "years_experience": 8
   },
   {
+    "name": "Candidate",
+    "title": "05-Dec-2022 to 18-Aug-2023",
+    "location": "",
+    "filename": "Unknown Candidate - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-08T19:14:34Z",
+    "skills": [],
+    "source_file": "inbox/Rajdeep Jadhav.txt",
+    "years_experience": 0
+  },
+  {
+    "name": "Tanmay Banerjee",
+    "title": "Senior Full Stack Developer",
+    "location": "Remote",
+    "filename": "Tanmay Banerjee - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-08T19:14:56Z",
+    "skills": [
+      "React.js",
+      "Next.js",
+      "Redux",
+      "JavaScript (ES6+)",
+      "TypeScript",
+      "HTML5",
+      "CSS3",
+      "Webpack",
+      "Node.js",
+      "Nest.Js",
+      "Express.js",
+      "Java"
+    ],
+    "source_file": "inbox/TANMAY BANERJEE.txt",
+    "years_experience": 7
+  },
+  {
     "name": "YARELI BRITO",
     "title": "US TAX PREPARATOR",
     "location": "",
     "filename": "YARELI BRITO - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-07T19:26:47Z",
+    "processed": "2026-05-08T19:14:58Z",
     "skills": [],
     "source_file": "inbox/Yareli Brito Simpalm.pdf",
-    "years_experience": 11
-  },
-  {
-    "name": "JASMIN",
-    "title": "US TAX PREPARATOR I ACCOUNTANT",
-    "location": "Vodafone India Pvt Ltd",
-    "filename": "JASMIN - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-07T19:35:28Z",
-    "skills": [],
-    "source_file": "inbox/Jasmin Patel Simpalm.pdf",
-    "years_experience": 11
-  },
-  {
-    "name": "ANDREA C. SANTANDER VITOLA",
-    "title": "Bilingual: English (Full Professional Proficiency) – Spanish (Native)",
-    "location": "Cartagena, Colombia",
-    "filename": "ANDREA C SANTANDER VITOLA - CV Simpalm Staffing.pdf",
-    "processed": "2026-05-08T19:12:09Z",
-    "skills": [
-      "Virtual Administrative Support",
-      "Calendar & Schedule Management",
-      "Customer Service & Client Communication",
-      "Reservation & Booking Coordination",
-      "Email & Inbox Management",
-      "Phone Support & Call Handling",
-      "Multitasking & Time Management",
-      "Problem Solving & Conflict Resolution",
-      "Operations Coordination",
-      "Microsoft Office & Digital Tools",
-      "Bilingual Communication",
-      "English/Spanish"
-    ],
-    "source_file": "inbox/Andrea_Santander_Virtual_Assistant_Restaurant.docx",
     "years_experience": 11
   }
 ]
