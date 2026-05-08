@@ -1585,5 +1585,25 @@
     "skills": [],
     "source_file": "inbox/Yareli Brito Simpalm.pdf",
     "years_experience": 11
+  },
+  {
+    "name": "Paula Ietta",
+    "title": "Onboarding Team Leader",
+    "location": "Argentina",
+    "filename": "Paula Ietta - CV Simpalm Staffing.pdf",
+    "processed": "2026-05-08T19:30:08Z",
+    "skills": [
+      "eClinicalWorks",
+      "Slack",
+      "Excel",
+      "HIPAA Compliance",
+      "Process Optimization",
+      "KPI Management",
+      "L&D Strategy",
+      "Onboarding Design",
+      "Cross-Functional Leadership"
+    ],
+    "source_file": "inbox/Ietta Paula resume 2026 SIMPALM.pdf",
+    "years_experience": 7
   }
 ]
