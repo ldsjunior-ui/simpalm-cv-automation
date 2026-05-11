@@ -1,0 +1,54 @@
+LEONARDO LEAL BICUDO
+IT Infrastructure & Production Support Analyst | Banking & Payments
+Brasília, DF, Brazil
++55 (61) 9 9394-5628
+lealbicudo@outlook.com
+
+PROFESSIONAL SUMMARY
+IT Production Support Analyst with 10+ years of experience supporting mission-critical banking infrastructure at Caixa Econômica Federal — one of Brazil's largest financial institutions. Specialized in 24x7 credit card authorization systems (SAT, SIA, SMP), batch process monitoring (Control-M), and Shell Script automation for high-availability environments. Hands-on background in COBOL development and international project delivery (Spain SIA authorizer). Bilingual in English and Spanish; currently expanding into DevOps practices. Seeking to leverage deep banking-sector expertise in a challenging global IT role.
+
+TECHNICAL SKILLS
+Production Support & Monitoring: Control-M (batch scheduling), Log Analysis, Incident Management, 24x7 NOC
+Banking & Payment Systems: Credit Card Authorization (SAT, SIA, SMP), COBOL, Core Banking Support
+Infrastructure: JBoss Application Server, Linux, Shell Scripting, Bash Automation
+Networking: Routers, Switches, Load Balancers, Network Configuration
+DevOps (in progress): CI/CD concepts, DevOps Essentials, Linux Essentials
+
+PROFESSIONAL EXPERIENCE
+
+QINTESS — Caixa Econômica Federal Project
+IT Production Support Analyst
+Jul 2023 – May 2026 | Brasília, Brazil (Remote/Hybrid)
+▸ Provided 24x7 production support for critical payment and batch processing systems serving millions of daily transactions at one of Brazil's largest state-owned banks.
+▸ Monitored and analyzed batch process failures using Control-M; reduced mean time to resolution by identifying recurring script failure patterns and implementing preventive Shell Script checks.
+▸ Led troubleshooting and root-cause analysis for production incidents across banking infrastructure, ensuring SLA compliance in high-availability environments.
+▸ Supported system implementation cycles and production deployments, coordinating change windows and post-deployment validation in regulated banking environment.
+▸ Performed log analysis and diagnosis across JBoss application servers, isolating failures before escalation and minimizing downtime impact.
+
+INDRA — Caixa Econômica Federal Project
+IT Production Support Analyst
+Aug 2013 – Mar 2023 | Brasília, Brazil
+▸ Delivered 10 years of continuous production support for Caixa's credit card authorization systems (SAT, SIA, SMP), maintaining platform stability for a high-volume transactional environment.
+▸ Participated in international project with the SIA authorizer (Spain), performing COBOL development and maintenance to adapt the system to Brazilian banking regulations — one of few team members with cross-border project experience.
+▸ Analyzed and resolved production incidents involving COBOL-based authorization flows, reducing recurrence through code improvements and enhanced monitoring scripts.
+▸ Monitored production deployments end-to-end, coordinating rollback procedures and post-release stability checks for critical banking releases.
+▸ Contributed to system improvements and change management processes in a regulated financial environment, consistently meeting availability and compliance targets.
+
+Ministry of Finance — CARF (Administrative Council of Tax Appeals)
+IT Support Intern
+Jul 2011 – Jul 2013 | Brasília, Brazil
+▸ Provided desktop and infrastructure support to 200+ government employees — hardware maintenance, software installation, network configuration, and user helpdesk.
+
+EDUCATION
+B.Tech in DevOps — Anhanguera University | Expected June 2027
+Technical Certificate in Networking — Universidade Católica de Brasília | Jun 2024 – Jun 2025
+
+CERTIFICATIONS
+Linux Essentials — 4Linux (2026)
+DevOps Essentials — 4Linux (2026)
+Programming Logic — ETB (2010)
+
+LANGUAGES
+English — Fluent
+Spanish — Fluent
+Portuguese — Native
