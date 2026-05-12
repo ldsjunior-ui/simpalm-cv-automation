@@ -1,0 +1,92 @@
+ALEC SANTOS
+Full Stack Developer | React · Next.js · TypeScript · Python
+Campinas, SP, Brazil
+alecsantos96@gmail.com
++55 (19) 98831-3723
+github.com/alec-o-mago
+
+PROFESSIONAL SUMMARY
+Full Stack Developer with 9+ years of experience architecting and delivering scalable web applications across fintech, EdTech, and enterprise sectors. Holds a Computer Engineering degree from UNICAMP — one of Brazil's top-ranked engineering schools. Proficient in modern JavaScript/TypeScript stacks (React, Next.js, Node.js, NestJS) and Python (FastAPI), with hands-on experience integrating AI APIs, government services, and cloud infrastructure (AWS, Docker). Known for taking ownership of full product cycles from frontend UX to backend architecture and CI/CD deployment. Bilingual English–Portuguese.
+
+TECHNICAL SKILLS
+TypeScript
+React.js
+Next.js
+Node.js
+NestJS
+AngularJS
+Vue.js
+Python
+FastAPI
+PHP
+Laravel
+SQL
+REST APIs
+Docker
+AWS
+GitHub Actions
+Jest
+Figma
+Tailwind CSS
+Scrum / Agile
+
+PROFESSIONAL EXPERIENCE
+
+Full Stack Developer
+Cognitivo.AI
+Mar 2023 – Nov 2024 | Nov 2025 – Present
+Campinas, Brazil
+▸ Engineered a mission-critical route management system for armored vehicle fleets, handling real-time tracking, scheduling, and security protocols across multiple clients.
+▸ Delivered full-stack development of a job board platform and multiple landing pages, improving lead conversion for enterprise clients.
+▸ Built and maintained React.js and AngularJS frontends integrated with Python and NestJS backends, ensuring high performance and code quality across concurrent projects.
+▸ Collaborated cross-functionally with design and product teams using Figma and Scrum methodology to meet delivery milestones.
+
+Full Stack Developer
+Grupo Assist
+Nov 2024 – Nov 2025
+Campinas, Brazil
+▸ Led full-stack development of a product management application for international import/export operations, implementing alignment with Brazil's NCM government classification system.
+▸ Integrated AI APIs for automated product categorization, reducing manual classification effort and improving accuracy for regulatory compliance workflows.
+▸ Built integrations with government APIs for customs and trade data, ensuring real-time synchronization with official classification databases.
+▸ Developed frontend with Next.js and backend services with PHP and NestJS in a regulated, data-sensitive environment.
+
+Full Stack Developer
+R4Edu
+Mar 2022 – Mar 2023
+Campinas, Brazil
+▸ Developed a comprehensive school management and online courses platform supporting student enrollment, course delivery, and administrative workflows.
+▸ Built dynamic AngularJS frontend components and PHP backend services, delivering a seamless user experience for educators and students.
+▸ Implemented course content management features enabling institutions to create, manage, and distribute digital learning materials at scale.
+
+Freelance Full Stack Developer
+Good Dollar
+Feb 2022 – Mar 2022
+Remote
+▸ Designed and implemented a localization feature for a cross-platform React Native application using a Node.js i18n library, enabling multi-language support.
+▸ Built and integrated a GitHub Actions CI/CD pipeline with the Crowdin API to automate translation file synchronization, eliminating manual handoffs between developers and translators.
+
+Student Project Coordinator & President
+GAMUX — UNICAMP Game Research and Development Group
+Mar 2018 – Feb 2022
+Campinas, Brazil
+▸ Led and scaled a student game development organization at UNICAMP, growing the group's presence and activities over 4 years.
+▸ Planned and facilitated weekly technical meetings, taught game development tools (Defold, Godot) to 20+ student members, and organized university-wide game jams and events.
+▸ Secured sponsorships and partnerships for events, developing negotiation and stakeholder management skills alongside technical leadership.
+
+EDUCATION
+Bachelor of Engineering in Computer Engineering
+UNICAMP — Universidade Estadual de Campinas
+2018 – 2023
+
+Computer Science Certificate
+COTUCA — Colégio Técnico da UNICAMP
+2012 – 2015
+
+CERTIFICATIONS & PROJECTS
+GitHub Portfolio: github.com/alec-o-mago
+Game Projects: alec-the-wizard.itch.io
+Technical Articles: gameguild.gg/author/alec
+
+LANGUAGES
+English — Fluent
+Portuguese — Native
