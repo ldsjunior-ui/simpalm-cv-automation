@@ -1,0 +1,47 @@
+WELLINGTON MORAES
+Full Stack Developer | Python · FastAPI · AI/RAG · Docker · MongoDB
+Belém, Pará, Brazil
+wellingtonbmoraes@hotmail.com
++55 (91) 98800-2938
+linkedin.com/in/wellington-barros-moraes
+github.com/AaronKannon
+
+PROFESSIONAL SUMMARY
+Full Stack Developer with 4+ years of experience building scalable backend systems, AI pipelines, and data-intensive applications for German tech companies. Specialized in Python (FastAPI, Asyncio, Pydantic) with hands-on experience in LLM integration, RAG architecture, and legacy system modernization. Proven track record of delivering measurable performance improvements — including a 97% gain in recommendation accuracy and 70% cost reduction on a core product. Bilingual English–Portuguese.
+
+TECHNICAL SKILLS
+Python 3 | FastAPI | Asyncio | Pydantic | MongoDB | Redis | Docker | Linux | Git
+LangChain | LLMs | RAG | Prompt Engineering | PostgreSQL | MySQL
+JavaScript | Vue 3 | Express.js | CI/CD | NoSQL
+
+PROFESSIONAL EXPERIENCE
+
+AI Backend Developer
+DataSquads UG — Germany (Remote)
+Jan 2025 – Present
+▸ Stabilized LLM output quality by engineering a multi-run averaging pipeline, reducing result variance and improving consistency of RPC analysis across production workloads.
+▸ Rearchitected the full prompting system with RAG-based data loading, delivering more contextually accurate AI responses and reducing hallucination rates in production.
+▸ Built a multifaceted prompt pipeline to standardize RPC analysis, enabling reliable scoring across diverse recruiting page formats.
+▸ Accelerated RPC processing speed by 70% through implementation of intermediate save checkpoints, cutting end-to-end pipeline latency significantly.
+▸ Delivered an AI Chat RAG System for recruiting best-practice retrieval, enabling real-time knowledge access for internal teams.
+
+Full Stack Developer
+picalike GmbH — Germany (Remote)
+Nov 2021 – Dec 2024
+▸ Improved recommendation script performance by 97% for the OSA product, directly increasing the accuracy and business value of the core recommendation engine.
+▸ Reduced codebase complexity by 33% in the recommendations middleware through targeted refactoring, lowering maintenance overhead and onboarding time for new engineers.
+▸ Co-delivered the new version of the main product, achieving an average 70% cost reduction through architectural improvements and infrastructure optimization.
+▸ Increased maintainability of the flagship product by 50% by introducing CI/CD pipelines and Dockerizing the deployment stack, enabling reliable automated releases.
+▸ Migrated a legacy proprietary library from Python 2 to Python 3, preserving full backward compatibility and unblocking modernization of the wider platform.
+▸ Led technology stack modernization from Python 2 Flask + SQLite to Python 3 FastAPI + MongoDB Atlas, improving performance, scalability, and long-term maintainability.
+
+EDUCATION
+Degree in Computer Systems Administration and Security
+Faculdade Estácio de Belém | 2020
+
+Bachelor in Computer Engineering
+Faculdade Estácio de Belém | 2018
+
+LANGUAGES
+English — Fluent (Professional Proficiency)
+Portuguese — Native
