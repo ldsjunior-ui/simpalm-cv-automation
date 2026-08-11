@@ -261,6 +261,62 @@ _CREDENTIAL_LINE_RE = re.compile(
     re.IGNORECASE
 )
 
+# Words that strongly suggest a company / organisation name — the counterpart to
+# ROLE_TITLE_WORDS below. Both are module-level (not local to parse_experience()) because
+# they're shared by header title/location classification (parse_header, _looks_like_valid_title,
+# the location fallback scanner) as well as the role/company pipe-split disambiguation
+# (_split_role_company inside parse_experience). A candidate_title or candidate_location field
+# that scores on COMPANY_INDICATOR_WORDS and not on ROLE_TITLE_WORDS is very likely a company
+# name that got misclassified — this was the root cause of several real header-parsing bugs
+# (e.g. "Supreme Source · Supply Co." extracted as a title, "Vodafone India Pvt Ltd" and
+# "JATO Dynamics do Brasil" extracted as a location because they happen to contain a country name).
+ROLE_TITLE_WORDS = {
+    'officer', 'manager', 'director', 'executive', 'assistant', 'associate',
+    'vice', 'president', 'head', 'lead', 'specialist', 'analyst', 'engineer',
+    'consultant', 'coordinator', 'administrator', 'supervisor', 'senior',
+    'junior', 'chief', 'accountant', 'controller', 'treasurer', 'auditor',
+    'advisor', 'representative', 'agent', 'technician', 'developer',
+    'designer', 'architect', 'strategist', 'planner', 'intern', 'trainee',
+    'ceo', 'cfo', 'coo', 'cto', 'cmo', 'svp', 'avp', 'evp', 'vp',
+}
+COMPANY_INDICATOR_WORDS = {
+    'ltd', 'limited', 'inc', 'llc', 'llp', 'corp', 'corporation', 'services',
+    'solutions', 'motors', 'associates', 'group', 'holdings', 'technologies',
+    'systems', 'industries', 'enterprises', 'international', 'global',
+    'consulting', 'agency', 'pvt', 'private', 'foundation', 'institute',
+    'ventures', 'capital', 'bank', 'trust', 'company', 'co',
+}
+
+# Statements about citizenship/work-authorization status ("BRAZILIAN AND PORTUGUESE
+# CITIZENSHIP", "AUTHORIZED TO WORK IN THE US") get a false-positive location match when they
+# happen to contain a country/nationality word — reject them from both location code paths.
+_CITIZENSHIP_STATEMENT_RE = re.compile(
+    r'\b(citizenship|nationality|work\s+authorization|work\s+permit|visa\s+status|'
+    r'authorized\s+to\s+work|eligible\s+to\s+work)\b',
+    re.IGNORECASE
+)
+
+def _looks_like_valid_title(text: str) -> bool:
+    """Reject a candidate_title string that's more likely something else entirely — a company
+    name (scores on COMPANY_INDICATOR_WORDS with zero ROLE_TITLE_WORDS hits), a language/
+    qualification statement ("Bilingual: English (...) – Spanish (Native)", 2+ parenthetical
+    asides is not a shape a real job title takes), or empty/too-short to mean anything. Shared
+    by parse_header()'s line classifier AND the derive-title-from-first-experience-role fallback
+    in parse_cv() — before this existed, the fallback had zero validation and would happily
+    promote a mis-parsed company name straight into candidate_title."""
+    if not text or len(text) < 3:
+        return False
+    words = re.findall(r"[a-zA-Z']+", text.lower())
+    company_hits = sum(1 for w in words if w in COMPANY_INDICATOR_WORDS)
+    role_hits = sum(1 for w in words if w in ROLE_TITLE_WORDS)
+    if company_hits > 0 and role_hits == 0:
+        return False
+    if text.count('(') >= 2:
+        return False
+    if re.match(r'^(bilingual|languages?|fluent|native\s+speaker)\b', text, re.IGNORECASE):
+        return False
+    return True
+
 def parse_header(header_text: str) -> dict:
     lines = [l.strip() for l in header_text.splitlines() if l.strip()]
 
@@ -296,9 +352,17 @@ def parse_header(header_text: str) -> dict:
         re.IGNORECASE
     )
 
+    # A line containing a URL/LinkedIn reference ANYWHERE, not just at position 0. _NAME_JUNK_RE's
+    # https?://|www\.|linkedin\.com alternatives only reject a line when the URL is the very FIRST
+    # token (re.match anchors the whole alternation at position 0) — a human-labeled line like
+    # "Linkedin: www.linkedin.com/in/fabibrandao" starts with "Linkedin:", not "www.", so it slid
+    # straight through every check and got extracted as the candidate's name, pushing the REAL name
+    # on the next line into the (also wrongly-validated) title field instead. re.search closes that.
+    _URL_ANYWHERE_RE = re.compile(r'https?://|www\.[\w-]|linkedin\.com|\.[a-z]{2,4}/\S', re.IGNORECASE)
+
     name = "Candidate"
     for line in lines[:5]:   # check first 5 lines only
-        if not line or line[0].isdigit() or _NAME_JUNK_RE.match(line):
+        if not line or line[0].isdigit() or _NAME_JUNK_RE.match(line) or _URL_ANYWHERE_RE.search(line):
             continue
         if _LOCATION_LINE_RE.match(line.strip()):
             continue
@@ -402,7 +466,34 @@ def parse_header(header_text: str) -> dict:
         r'interests?|hobbies|activities|volunteer|awards?|certific\w*|'
         r'licens\w*|publications?|languages?|additional\s+information|'
         r'marital\s+status|birth\s+(date|place)|nationality|citizenship|'
-        r'date\s+of\s+birth|gender|sex\b)',
+        r'date\s+of\s+birth|gender|sex\b|video\s+(introduction|resume|intro)|'
+        r'voice\s+intro\w*)',
+        re.IGNORECASE
+    )
+
+    # A title-specific junk regex, NOT _NAME_JUNK_RE. The two lists overlap a lot (curriculum
+    # vitae, section headers, country names all disqualify a NAME and a TITLE equally) but
+    # _NAME_JUNK_RE also rejects senior\s+\w+|junior\s+\w+|lead\s+\w+|programme?\s+manager|
+    # business\s+management|project\s+manager — words that disqualify something from being a
+    # PERSON'S NAME (nobody is named "Senior Manager") but are completely ordinary, common JOB
+    # TITLES ("Senior Executive Assistant", "Lead Developer"). Reusing _NAME_JUNK_RE for title
+    # rejection too (the bug this fixes) silently discarded the real title for any candidate
+    # whose most recent role starts with Senior/Junior/Lead — falling through to a lower-quality
+    # fallback line instead, e.g. "Video Introduction" or a citizenship statement landing in
+    # candidate_title because the genuine title got rejected first.
+    _TITLE_JUNK_RE = re.compile(
+        r'^(curriculum\s+vitae|resume|cv\b|professional\s+(experience|summary|profile)|'
+        r'work\s+experience|education|skills|summary|executive\s+(summary|profile)|'
+        r'career\s+(synopsis|objective|profile|summary)|professional\s+background|'
+        r'strengths?|about\s+me|objective|overview|highlights?|qualifications?|'
+        r'contact(ar|o|s)?|contato|roles?|responsibilities|references?|'
+        r'personal\s+(data|information|profile|statement)|'
+        r'additional\s+(information|details?)|'
+        r'language[s]?|certifications?|awards?|achievements?|'
+        r'argentina|brazil|brasil|india|ireland|pakistan|nigeria|ghana|kenya|'
+        r'philippines|indonesia|mexico|colombia|peru|chile|spain|portugal|'
+        r'united\s+(states|kingdom)|usa\b|uk\b|uae\b|'
+        r'https?://|www\.|linkedin\.com)',
         re.IGNORECASE
     )
 
@@ -413,6 +504,7 @@ def parse_header(header_text: str) -> dict:
         if EMAIL_RE.search(line) or PHONE_RE.search(line) or LINKEDIN_RE.search(line):
             continue
         ll = line.lower()
+        _line_words = re.findall(r"[a-zA-Z']+", ll)
         is_location = (
             any(kw in ll for kw in LOCATION_KEYWORDS)
             and not _CREDENTIAL_LINE_RE.search(line)   # reject "CPA (USA) | CMA (USA"
@@ -421,13 +513,24 @@ def parse_header(header_text: str) -> dict:
             # with "united states" buried inside it, or "BestBuy Canada architecture…")
             and len(line) <= 80
             and not (line.rstrip().endswith('.') and len(line.split()) > 3)
+            # reject a citizenship/work-authorization statement that merely mentions a country
+            # ("BRAZILIAN AND PORTUGUESE CITIZENSHIP") — it's a status claim, not an address
+            and not _CITIZENSHIP_STATEMENT_RE.search(line)
+            # reject a company name that happens to contain a country in its own name
+            # ("JATO Dynamics do Brasil", "Vodafone India Pvt Ltd") — same signal as
+            # _looks_like_valid_title below, applied here to the location classifier instead
+            and not (any(w in COMPANY_INDICATOR_WORDS for w in _line_words)
+                     and not any(w in ROLE_TITLE_WORDS for w in _line_words))
         )
         if is_location and not location:
             location = line
         elif not title and not is_location and 3 < len(line) < 120:
-            # Reject section headings, sentence fragments (ends with "."), name repetition
-            if _NAME_JUNK_RE.match(line) or _SECTION_HEADING_RE.match(line):
+            # Reject section headings, sentence fragments (ends with "."), name repetition.
+            # _TITLE_JUNK_RE, not _NAME_JUNK_RE — see the comment above the definition.
+            if _TITLE_JUNK_RE.match(line) or _SECTION_HEADING_RE.match(line):
                 continue
+            if not _looks_like_valid_title(line):
+                continue  # company name, or a language/qualification statement — see helper docstring
             if line.rstrip().endswith('.') and len(line) > 5:
                 continue  # sentence fragment (e.g. "organizations.", "Inc.")
             if line.strip() == name:
@@ -1088,24 +1191,11 @@ def parse_experience(exp_text: str) -> list:
     # Modifiers that signal a work location (remote / hybrid / on-site), not part of the role title.
     _LOCATION_MODIFIERS = {'remote', 'hybrid', 'onsite', 'on-site', 'in-office', 'presencial'}
 
-    # Words that strongly suggest a job title (used by _split_role_company).
-    _ROLE_TITLE_WORDS = {
-        'officer', 'manager', 'director', 'executive', 'assistant', 'associate',
-        'vice', 'president', 'head', 'lead', 'specialist', 'analyst', 'engineer',
-        'consultant', 'coordinator', 'administrator', 'supervisor', 'senior',
-        'junior', 'chief', 'accountant', 'controller', 'treasurer', 'auditor',
-        'advisor', 'representative', 'agent', 'technician', 'developer',
-        'designer', 'architect', 'strategist', 'planner', 'intern', 'trainee',
-        'ceo', 'cfo', 'coo', 'cto', 'cmo', 'svp', 'avp', 'evp', 'vp',
-    }
-    # Words that strongly suggest a company / organisation name.
-    _COMPANY_INDICATOR_WORDS = {
-        'ltd', 'limited', 'inc', 'llc', 'llp', 'corp', 'corporation', 'services',
-        'solutions', 'motors', 'associates', 'group', 'holdings', 'technologies',
-        'systems', 'industries', 'enterprises', 'international', 'global',
-        'consulting', 'agency', 'pvt', 'private', 'foundation', 'institute',
-        'ventures', 'capital', 'bank', 'trust', 'company', 'co',
-    }
+    # Role/company word lists moved to module level (near LOCATION_KEYWORDS) so
+    # parse_header()/_looks_like_valid_title() can share them too — aliased here
+    # under the original local names so nothing below this line needs to change.
+    _ROLE_TITLE_WORDS = ROLE_TITLE_WORDS
+    _COMPANY_INDICATOR_WORDS = COMPANY_INDICATOR_WORDS
 
     def _split_role_company(text: str):
         """
@@ -2444,7 +2534,16 @@ def parse_cv(text: str) -> dict:
                 continue
             # Shorten long role titles to a clean summary
             parts = re.split(r"[|,&]", derived)
-            header["candidate_title"] = " · ".join(p.strip() for p in parts[:3] if p.strip())[:100]
+            candidate_title = " · ".join(p.strip() for p in parts[:3] if p.strip())[:100]
+            # This fallback used to accept whatever the first experience entry's "role" field
+            # held with ZERO validation — unlike parse_header()'s own title classifier, which has
+            # a whole chain of rejection filters. When role/company boundary detection upstream
+            # mis-split an entry (e.g. a company name landing in the role slot), that garbage
+            # sailed straight into candidate_title. Apply the same validator here, and try the
+            # NEXT experience entry instead of just taking the first one blindly.
+            if not _looks_like_valid_title(candidate_title):
+                continue
+            header["candidate_title"] = candidate_title
             break
 
     # ── Location fallback: scan full text when header gave nothing ────────────
@@ -2475,6 +2574,15 @@ def parse_cv(text: str) -> dict:
             # "Toronto, Ontario, Canada" or "Greater Toronto Area, Canada").
             if len(s.split()) > 4:
                 continue
+            # A 4-word line with NO comma is very likely a company name that happens to end in
+            # a country ("JATO Dynamics do Brasil", "Optima Global Partners Nigeria") rather than
+            # a genuine multi-part location — every real location example on record ("Toronto,
+            # Ontario, Canada", "Managua, Nicaragua") uses a comma to separate its parts. The
+            # COMPANY_INDICATOR_WORDS veto below only catches company names built from known
+            # corporate-suffix words (Ltd, Inc, Group, Dynamics wasn't on that list) — this is
+            # the general shape-based signal for the ones that veto misses.
+            if len(s.split()) == 4 and ',' not in s:
+                continue
             # Reject sentence fragments ending with a period
             if s.rstrip().endswith('.') and len(s.split()) > 2:
                 continue
@@ -2483,6 +2591,18 @@ def parse_cv(text: str) -> dict:
                 r'\b(university|institute|college|school|academy|IIIT|IIT|IIM|MIT|NYU|UCLA|UCL|NTU|NUS)\b',
                 s, re.IGNORECASE
             ):
+                continue
+            # Reject a citizenship/work-authorization statement mentioning a country
+            if _CITIZENSHIP_STATEMENT_RE.search(s):
+                continue
+            # Reject a company name that happens to contain a country in its own name — this
+            # exact scanner is what surfaced "Vodafone India Pvt Ltd" and "JATO Dynamics do
+            # Brasil" as candidate_location for real candidates, both real employer names from
+            # deeper in the experience section that this fallback picked up purely because they
+            # contain a country word, with no signal distinguishing them from an actual location.
+            _s_words = re.findall(r"[a-zA-Z']+", sl)
+            if (any(w in COMPANY_INDICATOR_WORDS for w in _s_words)
+                    and not any(w in ROLE_TITLE_WORDS for w in _s_words)):
                 continue
             # Prefer lines that look like "City, Country" or just "Country"
             if _LOC_CANDIDATE_RE.match(s):
@@ -2584,7 +2704,19 @@ def main():
     # 2. Parse structured data
     # .txt fast path: skip regex pipeline — plain text is already clean,
     # LLM extracts faster and more accurately. max_tokens=2048 is enough.
+    #
+    # "Already clean" is an assumption, not a guarantee — extract_text() reads a .txt file
+    # verbatim with ZERO cleanup (unlike the PDF/DOCX branches, which both run fix_char_spacing()
+    # internally). In production this assumption has already been falsified: real inbox files
+    # (copy-pasted from a PDF viewer or a LinkedIn export rather than typed as plain text) arrive
+    # with the exact same artifacts fix_char_spacing() exists to catch — NUL bytes, Private-Use-Area
+    # bullet glyphs, concatenated tokens. Running it here is a strict improvement (idempotent no-op
+    # on text that's genuinely already clean) even though it does NOT by itself fix the harder case
+    # of tokens with NO separator at all between them (e.g. "NAME+91 12345 name@mail.com" glued into
+    # one run — that needs either the LLM path to actually succeed, or a further, deliberate
+    # heuristic to detect and re-synthesize line breaks in a collapsed .txt dump).
     if ext in ('.txt', '.text'):
+        text = fix_char_spacing(text)
         print("   ⚡ Plain-text mode: direct LLM extraction (skipping regex pipeline)")
         data = llm_extract_cv(text, max_tokens=2048)
         if not data:
