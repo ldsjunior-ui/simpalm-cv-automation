@@ -1486,29 +1486,6 @@
     "years_experience": 0
   },
   {
-    "name": "Wellington Moraes",
-    "title": "AI Backend Developer",
-    "location": "Belém, Brazil",
-    "filename": "Wellington Moraes - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T18:49:46Z",
-    "skills": [
-      "Python 3",
-      "FastAPI",
-      "Asyncio",
-      "Pydantic",
-      "MongoDB",
-      "Redis",
-      "Docker",
-      "Linux",
-      "Git",
-      "LangChain",
-      "LLMs",
-      "RAG"
-    ],
-    "source_file": "inbox/Wellington Moraes.txt",
-    "years_experience": 4
-  },
-  {
     "name": "NEEDS MANUAL REVIEW — inbox/TANMAY BANERJEE.txt (regex guess: 'anerjee-23rd')",
     "title": "",
     "location": "",
@@ -1575,29 +1552,6 @@
     "years_experience": 7
   },
   {
-    "name": "ANDREA C. SANTANDER VITOLA",
-    "title": "Event Coordinator",
-    "location": "Cartagena, Colombia",
-    "filename": "ANDREA C SANTANDER VITOLA - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:39:11Z",
-    "skills": [
-      "Virtual Administrative Support",
-      "Calendar & Schedule Management",
-      "Customer Service & Client Communication",
-      "Reservation & Booking Coordination",
-      "Email & Inbox Management",
-      "Phone Support & Call Handling",
-      "Multitasking & Time Management",
-      "Problem Solving & Conflict Resolution",
-      "Operations Coordination",
-      "Microsoft Office & Digital Tools",
-      "Bilingual Communication",
-      "English/Spanish"
-    ],
-    "source_file": "inbox/Andrea_Santander_Virtual_Assistant_Restaurant.docx",
-    "years_experience": 11
-  },
-  {
     "name": "CINTHIA BIETTI",
     "title": "Personal Injury Paralegal | Case Manager | Bilingual English–Spanish",
     "location": "Argentina (Remote-Ready)",
@@ -1619,26 +1573,6 @@
     ],
     "source_file": "inbox/Cinthia Bietti.txt",
     "years_experience": 23
-  },
-  {
-    "name": "FABÍOLA BRANDÃO",
-    "title": "Licks Attorneys – Founding Partner‘s  Executive Assistant",
-    "location": "",
-    "filename": "FABÍOLA BRANDÃO - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:39:16Z",
-    "skills": [
-      "Customer service for large companies",
-      "Knowledge  and  use  of  systems",
-      "Microsoft  Office",
-      "MXM Sistemas",
-      "Monday.com",
-      "Deel",
-      "ChatGPT",
-      "Notion",
-      "Canva"
-    ],
-    "source_file": "inbox/Fabiola Brandao.pdf",
-    "years_experience": 22
   },
   {
     "name": "Paula Ietta",
@@ -1664,85 +1598,6 @@
     "years_experience": 7
   },
   {
-    "name": "Iracy Gomes",
-    "title": "SENIOR EXECUTIVE ASSISTANT – C LEVEL AND US FOUNDER EXPERIENCE",
-    "location": "",
-    "filename": "Iracy Gomes - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:39:54Z",
-    "skills": [
-      "Calendar Management",
-      "Administrative Support",
-      "Strategic Planning and Project Management",
-      "Marketing Plan Social Media",
-      "Linkedin Sales Navigator",
-      "Content Creator for Linkedin",
-      "Website Creation via SquareSpace",
-      "Notion Internal Page Creation",
-      "Operational Management",
-      "Employer Branding",
-      "Employee Experience",
-      "Performance Management"
-    ],
-    "source_file": "inbox/Iracy_Gomes_docx.pdf",
-    "years_experience": 12
-  },
-  {
-    "name": "JASMIN",
-    "title": "US TAX PREPARATOR I ACCOUNTANT",
-    "location": "",
-    "filename": "JASMIN - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:39:57Z",
-    "skills": [],
-    "source_file": "inbox/Jasmin Patel Simpalm.pdf",
-    "years_experience": 11
-  },
-  {
-    "name": "KASHIFA KHAN",
-    "title": "Senior Full-Stack Engineer • AI/ML Specialist • Cloud Architect",
-    "location": "",
-    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:39:59Z",
-    "skills": [
-      "AI / Gen AI",
-      "5+ yrs",
-      "LangChain",
-      "OpenAI GPT-4",
-      "RAG Pipelines",
-      "Pinecone",
-      "Vector DBs",
-      "Prompt",
-      "Engineering",
-      "AI Agents",
-      "Hugging Face",
-      "Embeddings"
-    ],
-    "source_file": "inbox/KASHIFA KHAN.txt",
-    "years_experience": 8
-  },
-  {
-    "name": "KATHERINE GONZALEZ",
-    "title": "Optima Experts",
-    "location": "Managua, Nicaragua",
-    "filename": "KATHERINE GONZALEZ - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:40:02Z",
-    "skills": [
-      "Operations & Process Management",
-      "Executive Assistance",
-      "Customer Retention",
-      "Supply Chain Coordination",
-      "Quality Assurance",
-      "Team Leadership",
-      "Scheduling Tools",
-      "HubSpot",
-      "Salesforce",
-      "Jobber",
-      "ZenMaid",
-      "Housecall Pro"
-    ],
-    "source_file": "inbox/Katherine Gonzalez (1).pdf",
-    "years_experience": 7
-  },
-  {
     "name": "LEONARDO LEAL BICUDO",
     "title": "IT Production Support Analyst | Banking & Payments",
     "location": "Brasília, DF, Brazil",
@@ -1757,29 +1612,6 @@
     ],
     "source_file": "inbox/Leonardo Leal Bicudo.txt",
     "years_experience": 15
-  },
-  {
-    "name": "LILIAN DOUMEN",
-    "title": "VIRTUAL ASSISTANT | ADMINISTRATIVE ASSISTANT",
-    "location": "",
-    "filename": "LILIAN DOUMEN - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:40:06Z",
-    "skills": [
-      "Executive & Administrative Support",
-      "Calendar & Travel Management",
-      "Expense & Reimbursement Control",
-      "Financial Reporting & Budget Tracking",
-      "Event Planning & Meeting Coordination",
-      "CRM",
-      "SAP",
-      "MS Office",
-      "Google Suite",
-      "SharePoint",
-      "Bilingual",
-      "Portuguese & English"
-    ],
-    "source_file": "inbox/Lilian Doumen  - Simpalm.pdf",
-    "years_experience": 18
   },
   {
     "name": "MARIA RAMIREZ",
@@ -1805,52 +1637,6 @@
     "years_experience": 3
   },
   {
-    "name": "Rajdeep Jadav",
-    "title": "Senior Software Engineer",
-    "location": "Mundra, Gujarat, India",
-    "filename": "Rajdeep Jadav - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:41:46Z",
-    "skills": [
-      "JavaScript",
-      "TypeScript",
-      "Python",
-      "FastAPI",
-      "Node.js",
-      "Express.js",
-      "NestJS",
-      "GraphQL",
-      "React.js",
-      "Next.js",
-      "Redux",
-      "MongoDB"
-    ],
-    "source_file": "inbox/Rajdeep Jadhav.txt",
-    "years_experience": 6
-  },
-  {
-    "name": "TANMAY BANERJEE",
-    "title": "",
-    "location": "",
-    "filename": "TANMAY BANERJEE - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:42:54Z",
-    "skills": [
-      "Front-end Development: React.js",
-      "Nextjs",
-      "Redux",
-      "JavaScript",
-      "ES6+",
-      "TypeScript",
-      "HTML5",
-      "CSS3",
-      "WebPack",
-      "Back-end Development: Node.js",
-      "Nest.Js Express.js",
-      "Java"
-    ],
-    "source_file": "inbox/TANMAY BANERJEE.txt",
-    "years_experience": 0
-  },
-  {
     "name": "WELLINGTON MORAES",
     "title": "Full Stack Developer | Python · FastAPI · AI/RAG · Docker · MongoDB",
     "location": "Belém, Pará, Brazil",
@@ -1874,11 +1660,315 @@
     "years_experience": 1
   },
   {
+    "name": "Alec Santos",
+    "title": "Full Stack Developer",
+    "location": "Campinas, Brazil",
+    "filename": "Alec Santos - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:18:18Z",
+    "skills": [
+      "TypeScript",
+      "React.js",
+      "Next.js",
+      "Node.js",
+      "NestJS",
+      "AngularJS",
+      "Vue.js",
+      "Python",
+      "FastAPI",
+      "PHP",
+      "Laravel",
+      "SQL"
+    ],
+    "source_file": "inbox/Alec Santos.txt",
+    "years_experience": 9
+  },
+  {
+    "name": "ANDREA C. SANTANDER VITOLA",
+    "title": "Event Coordinator",
+    "location": "Cartagena, Colombia",
+    "filename": "ANDREA C SANTANDER VITOLA - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:18:21Z",
+    "skills": [
+      "Virtual Administrative Support",
+      "Calendar & Schedule Management",
+      "Customer Service & Client Communication",
+      "Reservation & Booking Coordination",
+      "Email & Inbox Management",
+      "Phone Support & Call Handling",
+      "Multitasking & Time Management",
+      "Problem Solving & Conflict Resolution",
+      "Operations Coordination",
+      "Microsoft Office & Digital Tools",
+      "Bilingual Communication",
+      "English/Spanish"
+    ],
+    "source_file": "inbox/Andrea_Santander_Virtual_Assistant_Restaurant.docx",
+    "years_experience": 11
+  },
+  {
+    "name": "Cinthia Bietti",
+    "title": "Personal Injury Paralegal / Pre-Litigation & Litigation Case Manager",
+    "location": "Argentina, Remote",
+    "filename": "Cinthia Bietti - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:18:55Z",
+    "skills": [
+      "Clio Manage",
+      "Case Status",
+      "eFileGA",
+      "MyCase",
+      "Court E-Filing",
+      "Microsoft Office"
+    ],
+    "source_file": "inbox/Cinthia Bietti.txt",
+    "years_experience": 17
+  },
+  {
+    "name": "FABÍOLA BRANDÃO",
+    "title": "Licks Attorneys – Founding Partner‘s  Executive Assistant",
+    "location": "",
+    "filename": "FABÍOLA BRANDÃO - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:18:58Z",
+    "skills": [
+      "Customer service for large companies",
+      "Knowledge  and  use  of  systems",
+      "Microsoft  Office",
+      "MXM Sistemas",
+      "Monday.com",
+      "Deel",
+      "ChatGPT",
+      "Notion",
+      "Canva"
+    ],
+    "source_file": "inbox/Fabiola Brandao.pdf",
+    "years_experience": 22
+  },
+  {
+    "name": "PAULA IETTA",
+    "title": "HEALTHCARE OPERATIONS & LEARNING DEVELOPMENT SPECIALIST",
+    "location": "",
+    "filename": "PAULA IETTA - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:19:01Z",
+    "skills": [],
+    "source_file": "inbox/Ietta Paula resume 2026 SIMPALM.pdf",
+    "years_experience": 7
+  },
+  {
+    "name": "Iracy Gomes",
+    "title": "SENIOR EXECUTIVE ASSISTANT – C LEVEL AND US FOUNDER EXPERIENCE",
+    "location": "",
+    "filename": "Iracy Gomes - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:19:05Z",
+    "skills": [
+      "Calendar Management",
+      "Administrative Support",
+      "Strategic Planning and Project Management",
+      "Marketing Plan Social Media",
+      "Linkedin Sales Navigator",
+      "Content Creator for Linkedin",
+      "Website Creation via SquareSpace",
+      "Notion Internal Page Creation",
+      "Operational Management",
+      "Employer Branding",
+      "Employee Experience",
+      "Performance Management"
+    ],
+    "source_file": "inbox/Iracy_Gomes_docx.pdf",
+    "years_experience": 12
+  },
+  {
+    "name": "JASMIN",
+    "title": "US TAX PREPARATOR I ACCOUNTANT",
+    "location": "",
+    "filename": "JASMIN - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:19:08Z",
+    "skills": [],
+    "source_file": "inbox/Jasmin Patel Simpalm.pdf",
+    "years_experience": 11
+  },
+  {
+    "name": "KASHIFA KHAN",
+    "title": "Senior Full-Stack Engineer • AI/ML Specialist • Cloud Architect",
+    "location": "",
+    "filename": "KASHIFA KHAN - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:19:10Z",
+    "skills": [
+      "AI / Gen AI",
+      "5+ yrs",
+      "LangChain",
+      "OpenAI GPT-4",
+      "RAG Pipelines",
+      "Pinecone",
+      "Vector DBs",
+      "Prompt",
+      "Engineering",
+      "AI Agents",
+      "Hugging Face",
+      "Embeddings"
+    ],
+    "source_file": "inbox/KASHIFA KHAN.txt",
+    "years_experience": 8
+  },
+  {
+    "name": "KATHERINE GONZALEZ",
+    "title": "Optima Experts",
+    "location": "Managua, Nicaragua",
+    "filename": "KATHERINE GONZALEZ - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:19:14Z",
+    "skills": [
+      "Operations & Process Management",
+      "Executive Assistance",
+      "Customer Retention",
+      "Supply Chain Coordination",
+      "Quality Assurance",
+      "Team Leadership",
+      "Scheduling Tools",
+      "HubSpot",
+      "Salesforce",
+      "Jobber",
+      "ZenMaid",
+      "Housecall Pro"
+    ],
+    "source_file": "inbox/Katherine Gonzalez (1).pdf",
+    "years_experience": 7
+  },
+  {
+    "name": "Leonardo Leal Bicudo",
+    "title": "IT Production Support Analyst",
+    "location": "Brasília, Brazil",
+    "filename": "Leonardo Leal Bicudo - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:19:40Z",
+    "skills": [
+      "Control-M",
+      "Shell Scripting",
+      "Log Analysis",
+      "Incident Management",
+      "24x7 NOC",
+      "SAT",
+      "SIA",
+      "SMP",
+      "COBOL",
+      "Core Banking Support",
+      "JBoss Application Server",
+      "Linux"
+    ],
+    "source_file": "inbox/Leonardo Leal Bicudo.txt",
+    "years_experience": 15
+  },
+  {
+    "name": "LILIAN DOUMEN",
+    "title": "VIRTUAL ASSISTANT | ADMINISTRATIVE ASSISTANT",
+    "location": "",
+    "filename": "LILIAN DOUMEN - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:19:43Z",
+    "skills": [
+      "Executive & Administrative Support",
+      "Calendar & Travel Management",
+      "Expense & Reimbursement Control",
+      "Financial Reporting & Budget Tracking",
+      "Event Planning & Meeting Coordination",
+      "CRM",
+      "SAP",
+      "MS Office",
+      "Google Suite",
+      "SharePoint",
+      "Bilingual",
+      "Portuguese & English"
+    ],
+    "source_file": "inbox/Lilian Doumen  - Simpalm.pdf",
+    "years_experience": 18
+  },
+  {
+    "name": "Maria Ramirez",
+    "title": "Paralegal",
+    "location": "Colombia",
+    "filename": "Maria Ramirez - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:21:59Z",
+    "skills": [
+      "Clio",
+      "Litify",
+      "Adobe Acrobat",
+      "Microsoft Word",
+      "SharePoint",
+      "Google Drive"
+    ],
+    "source_file": "inbox/Maria Ramirez.txt",
+    "years_experience": 3
+  },
+  {
+    "name": "Rajdeep Jadav",
+    "title": "Senior Software Engineer",
+    "location": "Mundra, India",
+    "filename": "Rajdeep Jadav - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:25:45Z",
+    "skills": [
+      "Javascript",
+      "Typescript",
+      "Python",
+      "FastAPI",
+      "Node Js",
+      "Express Js",
+      "Nest js",
+      "GraphQ",
+      "HTML",
+      "CSS",
+      "React Js",
+      "Next Js"
+    ],
+    "source_file": "inbox/Rajdeep Jadhav.txt",
+    "years_experience": 6
+  },
+  {
+    "name": "TANMAY BANERJEE",
+    "title": "",
+    "location": "",
+    "filename": "TANMAY BANERJEE - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:28:02Z",
+    "skills": [
+      "Front-end Development: React.js",
+      "Nextjs",
+      "Redux",
+      "JavaScript",
+      "ES6+",
+      "TypeScript",
+      "HTML5",
+      "CSS3",
+      "WebPack",
+      "Back-end Development: Node.js",
+      "Nest.Js Express.js",
+      "Java"
+    ],
+    "source_file": "inbox/TANMAY BANERJEE.txt",
+    "years_experience": 0
+  },
+  {
+    "name": "Wellington Moraes",
+    "title": "AI Backend Developer",
+    "location": "Belém, Pará, Brazil",
+    "filename": "Wellington Moraes - CV Simpalm Staffing.pdf",
+    "processed": "2026-08-11T20:28:36Z",
+    "skills": [
+      "Python 3",
+      "FastAPI",
+      "Asyncio",
+      "Pydantic",
+      "MongoDB",
+      "Redis",
+      "Docker",
+      "Linux",
+      "Git",
+      "LangChain",
+      "LLMs",
+      "RAG"
+    ],
+    "source_file": "inbox/Wellington Moraes.txt",
+    "years_experience": 4
+  },
+  {
     "name": "YARELI BRITO",
     "title": "US TAX PREPARATOR",
     "location": "",
     "filename": "YARELI BRITO - CV Simpalm Staffing.pdf",
-    "processed": "2026-08-11T19:44:55Z",
+    "processed": "2026-08-11T20:28:38Z",
     "skills": [],
     "source_file": "inbox/Yareli Brito Simpalm.pdf",
     "years_experience": 11
