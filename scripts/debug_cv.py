@@ -12,7 +12,7 @@ from pathlib import Path
 
 # Make sure process_cv is importable from repo root
 sys.path.insert(0, str(Path(__file__).parent))
-from process_cv import (extract_text, fix_char_spacing, parse_cv, llm_extract_cv,
+from process_cv import (extract_text, fix_char_spacing, parse_cv, llm_extract_cv_cascade,
                          COMPANY_INDICATOR_WORDS, ROLE_TITLE_WORDS, reconstruct_broken_lines,
                          looks_like_collapsed_txt, looks_like_plausible_name, COLLAPSED_TXT_WARNING)
 
@@ -25,13 +25,14 @@ def test_cv(path: str) -> dict:
     # previous version of this script did, was a harmless-in-practice but redundant double
     # application. Mirror main()'s actual code exactly: extract once, don't re-clean.
     text = extract_text(path)
-    # .txt/.text files take a DIFFERENT code path in production (main(), ~line 2705): they skip
-    # the regex pipeline entirely and go straight to llm_extract_cv(), with parse_cv() only as a
-    # fallback if the LLM call fails. Before this fix, debug_cv.py always called parse_cv()
-    # regardless of extension — meaning it silently tested a code path .txt files NEVER actually
-    # take in production, and its default no-args sweep didn't even glob .txt files at all. Since
-    # the pipeline's docs describe .txt as the PRIMARY input format ("Pipeline agora recebe APENAS
-    # .txt"), the local pre-push verification tool was blind to its own main input format.
+    # .txt/.text files take a DIFFERENT code path in production (main()): they skip the regex
+    # pipeline entirely and go straight to llm_extract_cv_cascade() (Ollama local -> Anthropic ->
+    # OpenRouter), with parse_cv() only as a fallback if every LLM rung fails. Before an earlier
+    # fix, debug_cv.py always called parse_cv() regardless of extension — meaning it silently
+    # tested a code path .txt files NEVER actually take in production, and its default no-args
+    # sweep didn't even glob .txt files at all. Since the pipeline's docs describe .txt as the
+    # PRIMARY input format ("Pipeline agora recebe APENAS .txt"), the local pre-push verification
+    # tool was blind to its own main input format.
     if ext in ('.txt', '.text'):
         text = fix_char_spacing(text)  # mirrors the same fix now in main() — see its comment
         is_collapsed = looks_like_collapsed_txt(text)
@@ -47,21 +48,22 @@ def test_cv(path: str) -> dict:
                 print("   ✅ Local reconstruction recovered a plausible name — LLM call skipped entirely.")
                 data = local_data
             else:
-                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM.")
-                data = llm_extract_cv(reconstructed, max_tokens=2048)
+                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM cascade "
+                      "(Ollama local first, then paid APIs only if needed).")
+                data = llm_extract_cv_cascade(reconstructed, max_tokens=2048)
                 if not data:
-                    print("   ⚠️  LLM unavailable (no ANTHROPIC_API_KEY, or the call failed) — using "
-                          "the local reconstruction result as-is.")
+                    print("   ⚠️  No LLM rung available (Ollama not running and no ANTHROPIC_API_KEY/"
+                          "OPENROUTER_API_KEY) — using the local reconstruction result as-is.")
                     data = local_data
                     if not looks_like_plausible_name(data.get("candidate_name", "")):
                         _guess = data.get("candidate_name", "")
                         data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {Path(path).name} (regex guess: {_guess!r})"
         else:
-            data = llm_extract_cv(text, max_tokens=2048)
+            data = llm_extract_cv_cascade(text, max_tokens=2048)
             if not data:
-                print("   ⚠️  LLM unavailable (no ANTHROPIC_API_KEY, or the call failed) — falling back "
-                      "to the regex parser. This does NOT prove the real .txt/LLM path is correct; it only "
-                      "proves parse_cv()'s fallback is. Set ANTHROPIC_API_KEY to test the actual production path.")
+                print("   ⚠️  No LLM rung available (Ollama not running and no ANTHROPIC_API_KEY/"
+                      "OPENROUTER_API_KEY) — falling back to the regex parser. This does NOT prove the "
+                      "real .txt/LLM path is correct; it only proves parse_cv()'s fallback is.")
                 data = parse_cv(text)
     else:
         data = parse_cv(text)

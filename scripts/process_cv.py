@@ -2089,6 +2089,183 @@ def generate_stats(experience: list, languages: list) -> list:
 
 # ── LLM-based Extraction Fallback ────────────────────────────────────────────
 
+# The exact same JSON schema and field-completion contract as llm_extract_cv()'s Anthropic
+# prompt below — shared as one constant so the "no fabricated summary" rule (see the
+# resume-parsing-engineering skill's LLM-fallback section: an LLM told to "write a summary if
+# missing" WILL invent one, and that is a defect, not a feature) stays enforced identically
+# across all three cascade rungs, rather than drifting the way llm_extract_cv_openrouter()'s own
+# prompt already had ("write a 2-sentence professional summary from context" — contradicts this
+# same rule, left as a known pre-existing inconsistency, not touched by this change).
+_CV_EXTRACTION_SCHEMA_PROMPT = (
+    "You are an expert HR data extractor. Given raw CV text, return a single "
+    "valid JSON object — no prose, no markdown, no code fences. The schema is:\n"
+    '{\n'
+    '  "candidate_name": "string",\n'
+    '  "candidate_initials": "string (2 chars)",\n'
+    '  "candidate_title": "string",\n'
+    '  "candidate_email": "string",\n'
+    '  "candidate_phone": "string",\n'
+    '  "candidate_location": "string",\n'
+    '  "candidate_linkedin": "string",\n'
+    '  "summary": "string (2-4 sentence professional summary)",\n'
+    '  "experience": [\n'
+    '    {"role": "string", "company": "string", "period": "string", '
+    '"bullets": ["string", ...]}\n'
+    '  ],\n'
+    '  "skills": ["string", ...],\n'
+    '  "languages": [{"name": "string", "level": "string", "percent": 0-100}],\n'
+    '  "education": [{"degree": "string", "institution": "string"}],\n'
+    '  "certifications": ["string", ...],\n'
+    '  "projects": [],\n'
+    '  "awards": []\n'
+    '}\n'
+    "Rules:\n"
+    "- Extract ALL work experience entries — never omit any role.\n"
+    "- For consulting CVs with Project/Client/Role labels, use 'Role' as the role "
+    "and 'Client' as the company.\n"
+    "- Include up to 6 bullet points per role (pick the most impactful ones).\n"
+    "- If no summary exists in the CV, leave the summary field as an empty string.\n"
+    "- For skills: extract specific technology/tool/framework/language names only "
+    "(e.g. 'React.js', 'Python', 'Docker', 'AWS'). Do NOT include: experience year "
+    "markers ('5+ yrs', '3 years'), category headers ('Frontend', 'Backend', 'Languages'), "
+    "or vague descriptors ('proficient', 'expert'). If a skill name spans multiple "
+    "lines, join it into one item. Limit to 20 most relevant technical skills.\n"
+    "- For candidate_location: extract city/country only (e.g. 'Bangalore, India'). "
+    "If only 'Remote' is listed, use 'Remote'. Never use full sentences.\n"
+    "- The raw text may have PDF/copy-paste artifacts: merged words without spaces, missing "
+    "newlines, or section headings concatenated with candidate names "
+    "(e.g. 'SUMMARYRAJDEEP JADAV' means section=SUMMARY, name=Rajdeep Jadav). "
+    "Reconstruct the correct data regardless.\n"
+    "- Sort experience entries most-recent-first by start date.\n"
+    "- Return ONLY the JSON object — no other text."
+)
+
+def _fill_cv_defaults(data: dict) -> dict:
+    """Shared setdefault() block for the extraction result dict — identical across all three
+    cascade rungs (Ollama/Anthropic/OpenRouter), pulled out once so a future schema change only
+    needs editing in one place instead of three copies silently drifting apart."""
+    data.setdefault("candidate_name", "Candidate")
+    data.setdefault("candidate_initials",
+                    "".join(w[0].upper() for w in data["candidate_name"].split()[:2]))
+    data.setdefault("candidate_title", "")
+    data.setdefault("candidate_email", "")
+    data.setdefault("candidate_phone", "")
+    data.setdefault("candidate_location", "")
+    data.setdefault("candidate_linkedin", "")
+    data.setdefault("summary", "")
+    data.setdefault("experience", [])
+    data.setdefault("skills", [])
+    data.setdefault("languages", [])
+    data.setdefault("education", [])
+    data.setdefault("certifications", [])
+    data.setdefault("projects", [])
+    data.setdefault("awards", [])
+    data.setdefault("volunteer", "")
+    data.setdefault("stats", generate_stats(data["experience"], data["languages"]))
+    return data
+
+def llm_extract_cv_ollama(text: str, model: str = "llama3.1:8b", timeout: int = 280) -> dict | None:
+    """
+    Local, free, offline CV extraction via Ollama (see leonardo-skills:local-llm-mastery) — the
+    FIRST attempt in llm_extract_cv_cascade(), tried before either paid API, per the standing
+    "prefer open-source/local over paid tokens" rule. Same JSON schema and field-completion
+    contract as llm_extract_cv() (Anthropic)/llm_extract_cv_openrouter(), so callers can treat
+    all three interchangeably — none of them raise, all return None on any failure so the caller
+    can just fall through to the next rung with no try/except needed at the call site.
+
+    Requirements: Ollama running locally (`ollama serve`, the default when the Ollama.app menu
+    bar app is running) with `model` already pulled (`ollama pull llama3.1:8b`). Neither is
+    installed on a stock GitHub Actions runner — this rung is expected to return None there via
+    a fast connection-refused, not a slow timeout, so it costs production nothing when Ollama
+    genuinely isn't available; it only helps on a machine that actually has it running.
+
+    Latency note, measured on this dev Mac, honestly, not glossed over: a cold model load takes
+    ~7s once warmed up (confirmed via an isolated "say hello" smoke test — Ollama and the model
+    were both responsive). A FULL structured extraction on TANMAY BANERJEE.txt (~9KB input) under
+    real, non-idle system load (`uptime` load average in the 20s at the time, several other
+    processes competing for the same CPU/GPU) took ~79s to generate just 500 (truncated) output
+    tokens at roughly 6-7 tokens/sec — a complete, untruncated response (full experience list
+    with bullets, skills, etc.) can reasonably need several times that. This is real machine-load
+    variance inherent to CPU/unified-memory-bound local inference under contention, not a broken
+    integration — and it DID find genuinely richer data than the local regex reconstruction alone
+    (a full experience entry with role AND company, where the regex path found zero). `timeout`
+    defaults to a generous 280s for exactly this reason; pass a shorter value on a known-idle
+    machine, or a longer one if this still isn't enough on a heavily-loaded run.
+    """
+    try:
+        import requests as _req
+    except ImportError:
+        return None
+
+    try:
+        resp = _req.post(
+            "http://localhost:11434/api/chat",
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": _CV_EXTRACTION_SCHEMA_PROMPT},
+                    {"role": "user", "content": "Extract all CV data from the following text and return as JSON:\n\n" + text},
+                ],
+                "format": "json",  # constrained JSON decoding — guarantees syntactically valid JSON,
+                                    # preferred per local-llm-mastery over a "respond only in JSON"
+                                    # instruction the model can still ignore
+                "options": {"temperature": 0.1, "num_ctx": 8192, "num_predict": 3000},
+                "stream": False,
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        raw = resp.json()["message"]["content"].strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        data = _fill_cv_defaults(json.loads(raw))
+        print(f"   🖥️  Local Ollama ({model}) extraction used — {len(data['experience'])} roles found — $0, no API call")
+        return data
+    except _req.exceptions.ConnectionError:
+        # Ollama not running — the expected, silent path on any machine without it (e.g. GH
+        # Actions today). Not worth a warning print; every other environment DOES have it.
+        return None
+    except _req.exceptions.Timeout:
+        print(f"   ⚠️  Ollama extraction timed out after {timeout}s (model may be cold-loading "
+              f"or the machine is under heavy load) — falling through to the next rung")
+        return None
+    except Exception as exc:
+        print(f"   ⚠️  Ollama extraction failed: {exc}")
+        return None
+
+def llm_extract_cv_cascade(text: str, max_tokens: int = 4096) -> dict | None:
+    """
+    Ordered LLM extraction cascade, cheapest/most-local rung tried FIRST: Ollama (free, local,
+    zero marginal cost, no API key, no network egress) -> Anthropic claude-haiku (paid, fast,
+    the most reliable of the three) -> OpenRouter free-tier models (paid-adjacent, rate-limited,
+    already-existing last resort). This is the direct fix for "mitigar a necessidade de API
+    LLMs" — Ollama is tried first, not bolted on as a last-ditch fallback, so any machine with it
+    running (this dev Mac today; potentially a future self-hosted GH Actions runner) never
+    touches a paid API for a CV a local model already extracts well enough.
+
+    "Well enough" is judged the same way the rest of this pipeline already judges LLM output
+    quality (see parse_cv()'s own inline cascade): has at least 1 experience entry and a name
+    that isn't the bare "Candidate" placeholder. If Ollama's result doesn't clear that bar,
+    escalate to Anthropic, then OpenRouter, keeping whichever result found the most experience
+    entries — the same "did this rung actually improve on what we already have" comparison
+    parse_cv() already applies to the Anthropic->OpenRouter step, extended one rung earlier.
+    """
+    best = llm_extract_cv_ollama(text)
+    if best and best.get("experience") and best.get("candidate_name") not in ("", "Candidate"):
+        return best  # good enough, free — skip both paid rungs entirely
+
+    anthropic_data = llm_extract_cv(text, max_tokens=max_tokens)
+    if anthropic_data and (not best or len(anthropic_data.get("experience", [])) > len(best.get("experience", []))):
+        best = anthropic_data
+    if best and best.get("experience") and best.get("candidate_name") not in ("", "Candidate"):
+        return best
+
+    openrouter_data = llm_extract_cv_openrouter(text)
+    if openrouter_data and (not best or len(openrouter_data.get("experience", [])) > len(best.get("experience", []))):
+        best = openrouter_data
+
+    return best  # may be None, or the best partial result any rung produced — caller decides
+
 def llm_extract_cv(text: str, max_tokens: int = 4096) -> dict | None:
     """
     Use Claude API (claude-3-haiku) to extract a complete, structured CV dict
@@ -2107,46 +2284,6 @@ def llm_extract_cv(text: str, max_tokens: int = 4096) -> dict | None:
 
         client = anthropic.Anthropic(api_key=api_key)
 
-        system_prompt = (
-            "You are an expert HR data extractor. Given raw CV text, return a single "
-            "valid JSON object — no prose, no markdown, no code fences. The schema is:\n"
-            '{\n'
-            '  "candidate_name": "string",\n'
-            '  "candidate_initials": "string (2 chars)",\n'
-            '  "candidate_title": "string",\n'
-            '  "candidate_email": "string",\n'
-            '  "candidate_phone": "string",\n'
-            '  "candidate_location": "string",\n'
-            '  "candidate_linkedin": "string",\n'
-            '  "summary": "string (2-4 sentence professional summary)",\n'
-            '  "experience": [\n'
-            '    {"role": "string", "company": "string", "period": "string", '
-            '"bullets": ["string", ...]}\n'
-            '  ],\n'
-            '  "skills": ["string", ...],\n'
-            '  "languages": [{"name": "string", "level": "string", "percent": 0-100}],\n'
-            '  "education": [{"degree": "string", "institution": "string"}],\n'
-            '  "certifications": ["string", ...],\n'
-            '  "projects": [],\n'
-            '  "awards": []\n'
-            '}\n'
-            "Rules:\n"
-            "- Extract ALL work experience entries — never omit any role.\n"
-            "- For consulting CVs with Project/Client/Role labels, use 'Role' as the role "
-            "and 'Client' as the company.\n"
-            "- Include up to 6 bullet points per role (pick the most impactful ones).\n"
-            "- If no summary exists in the CV, leave the summary field as an empty string.\n"
-            "- For skills: extract specific technology/tool/framework/language names only "
-            "(e.g. 'React.js', 'Python', 'Docker', 'AWS'). Do NOT include: experience year "
-            "markers ('5+ yrs', '3 years'), category headers ('Frontend', 'Backend', 'Languages'), "
-            "or vague descriptors ('proficient', 'expert'). If a skill name spans multiple "
-            "lines, join it into one item. Limit to 20 most relevant technical skills.\n"
-            "- For candidate_location: extract city/country only (e.g. 'Bangalore, India'). "
-            "If only 'Remote' is listed, use 'Remote'. Never use full sentences.\n"
-            "- Sort experience entries most-recent-first by start date.\n"
-            "- Return ONLY the JSON object — no other text."
-        )
-
         response = client.messages.create(
             model="claude-haiku-4-5",
             max_tokens=max_tokens,
@@ -2159,34 +2296,14 @@ def llm_extract_cv(text: str, max_tokens: int = 4096) -> dict | None:
                     ),
                 }
             ],
-            system=system_prompt,
+            system=_CV_EXTRACTION_SCHEMA_PROMPT,  # shared with the Ollama rung — see its definition
         )
 
         raw = response.content[0].text.strip()
         # Strip accidental code fences
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
-        data = json.loads(raw)
-
-        # Ensure required fields and types
-        data.setdefault("candidate_name", "Candidate")
-        data.setdefault("candidate_initials",
-                        "".join(w[0].upper() for w in data["candidate_name"].split()[:2]))
-        data.setdefault("candidate_title", "")
-        data.setdefault("candidate_email", "")
-        data.setdefault("candidate_phone", "")
-        data.setdefault("candidate_location", "")
-        data.setdefault("candidate_linkedin", "")
-        data.setdefault("summary", "")
-        data.setdefault("experience", [])
-        data.setdefault("skills", [])
-        data.setdefault("languages", [])
-        data.setdefault("education", [])
-        data.setdefault("certifications", [])
-        data.setdefault("projects", [])
-        data.setdefault("awards", [])
-        data.setdefault("volunteer", "")
-        data.setdefault("stats", generate_stats(data["experience"], data["languages"]))
+        data = _fill_cv_defaults(json.loads(raw))
 
         print(f"   🤖 LLM extraction used — {len(data['experience'])} roles found")
         return data
@@ -2253,7 +2370,8 @@ def llm_extract_cv_openrouter(text: str) -> dict | None:
         "- candidate_title must be the most recent role title, never a section heading.\n"
         "- candidate_location: city + country/state only (e.g. 'Ahmedabad, India'). "
         "If only 'Remote' is listed, use 'Remote'. Never use full sentences.\n"
-        "- If summary is not in the CV, write a 2-sentence professional summary from context.\n"
+        "- If no summary exists in the CV, leave the summary field as an empty string — never "
+        "invent or infer a summary the candidate didn't write.\n"
         "- For skills: extract specific technology/tool/framework/language names only "
         "(e.g. 'React.js', 'Python', 'Docker'). Do NOT include: year markers ('5+ yrs'), "
         "category headers ('Frontend', 'Backend'), or vague descriptors. "
@@ -2305,27 +2423,7 @@ def llm_extract_cv_openrouter(text: str) -> dict | None:
             # Strip accidental code fences
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw)
-            data = json.loads(raw)
-
-            # Ensure all required fields exist
-            data.setdefault("candidate_name", "Candidate")
-            data.setdefault("candidate_initials",
-                            "".join(w[0].upper() for w in data["candidate_name"].split()[:2]))
-            data.setdefault("candidate_title", "")
-            data.setdefault("candidate_email", "")
-            data.setdefault("candidate_phone", "")
-            data.setdefault("candidate_location", "")
-            data.setdefault("candidate_linkedin", "")
-            data.setdefault("summary", "")
-            data.setdefault("experience", [])
-            data.setdefault("skills", [])
-            data.setdefault("languages", [])
-            data.setdefault("education", [])
-            data.setdefault("certifications", [])
-            data.setdefault("projects", [])
-            data.setdefault("awards", [])
-            data.setdefault("volunteer", "")
-            data.setdefault("stats", generate_stats(data["experience"], data["languages"]))
+            data = _fill_cv_defaults(json.loads(raw))
 
             print(f"   🤖 OpenRouter ({model}) extraction used — "
                   f"{len(data['experience'])} roles found")
@@ -2435,6 +2533,53 @@ def rescue_bullet_sections(sections: dict) -> dict:
 
 # ── Full Parse ────────────────────────────────────────────────────────────────
 
+def cleanup_missing_spaces(text: str, min_run_length: int = 18) -> str:
+    """
+    Best-effort, LOCAL, offline word-boundary reconstruction for prose where multiple words got
+    fused with ZERO spaces at all — a different, deeper problem than reconstruct_broken_lines()'s
+    missing LINE breaks. Confirmed real case, TANMAY BANERJEE.txt's summary: "leveragingstrong
+    back-end expertise... high-performanceapplication development" — no line-break reconstruction
+    fixes this, the words themselves are glued together mid-sentence.
+
+    Uses `wordninja` (leonardo-skills:local-llm-mastery cross-references this kind of tool: free,
+    offline, dictionary/word-frequency based, no network call, no API key — exactly what the
+    standing "prefer open-source/local over paid tokens" rule points toward for a problem that
+    doesn't actually need an LLM to solve). Deliberately narrow scope:
+
+    - Only touches runs of `min_run_length`+ letters with NO existing punctuation/spaces inside
+      them — never a short token, a real single word, an email, or a URL (those already have
+      their own dots/slashes/@ breaking up any long run).
+    - Rejects wordninja's own split when too many resulting fragments are 1-2 characters long
+      (a strong signal it guessed wrong on uncommon jargon rather than found real boundaries —
+      confirmed failure mode in testing: a synthetic "codereduncancy" test case mis-split into
+      "code re duncan cy"; the real CV text "reducingcoderedundancy", with more surrounding
+      characters for wordninja's frequency model to work with, split correctly). On rejection,
+      the original run is left untouched — ugly but not silently wrong, the same "don't ship a
+      confident guess when you're not confident" principle this pipeline applies elsewhere.
+    - Only ever called on prose fields (summary) where an occasional imperfect split is a minor
+      cosmetic issue — never wired into name/title/location extraction, where a wrong split
+      would be a real-data-quality regression, not a cosmetic one.
+
+    No-ops (returns text unchanged) if wordninja isn't installed — an optional dependency this
+    function degrades gracefully without, never a hard pipeline requirement.
+    """
+    try:
+        import wordninja
+    except ImportError:
+        return text
+
+    def _maybe_split(m):
+        word = m.group(0)
+        split = wordninja.split(word)
+        if len(split) <= 1:
+            return word
+        short_frags = sum(1 for w in split if len(w) <= 2)
+        if short_frags / len(split) > 0.4:
+            return word  # low-confidence split — leave the original run alone
+        return ' '.join(split)
+
+    return re.sub(r'[a-zA-Z]{' + str(min_run_length) + r',}', _maybe_split, text)
+
 def parse_cv(text: str) -> dict:
     sections        = split_sections(text)
     sections        = rescue_bullet_sections(sections)   # rescue "▸ EDUCATION …" lines
@@ -2457,6 +2602,13 @@ def parse_cv(text: str) -> dict:
     summary = re.sub(r'[•]+', ' ', summary)            # replace any remaining bullets with space
     summary = re.sub(r'\n+', ' ', summary)              # collapse inline newlines
     summary = re.sub(r'  +', ' ', summary).strip()     # normalise multiple spaces
+    # Best-effort local word-boundary reconstruction for prose with words fused together with
+    # zero spaces at all (a copy-paste artifact distinct from missing LINE breaks) — see
+    # cleanup_missing_spaces()'s docstring for the exact scope and the confirmed-safe guard
+    # against wordninja mis-splitting uncommon jargon. Deliberately BEFORE the length guard below
+    # so a fused run doesn't undercount as "one word" and let an otherwise-too-long summary
+    # through the 80-word cap.
+    summary = cleanup_missing_spaces(summary)
 
     # ── Summary length guard ─────────────────────────────────────────────────
     # Candidates sometimes paste their entire LinkedIn "About" (10+ bullets,
@@ -2671,14 +2823,12 @@ def parse_cv(text: str) -> dict:
 
     # ── LLM fallback: engage when regex extraction is clearly incomplete ──────
     # Trigger when: (a) fewer than 2 experience roles OR parse is clearly
-    # malformed (table-format garbage), AND (b) any LLM key is available.
-    # Fallback chain: Anthropic (claude-haiku) → OpenRouter (free models).
+    # malformed (table-format garbage), AND (b) any LLM rung is available.
+    # Cascade (cheapest/most-local first): Ollama (free, local) → Anthropic (paid) →
+    # OpenRouter (free-tier, rate-limited). See llm_extract_cv_cascade()'s own docstring.
     # The LLM result replaces the entire parsed dict when it finds more roles.
     if (_experience_is_malformed(experience) or len(experience) < 2) and len(text) > 800:
-        llm_data = llm_extract_cv(text)  # Anthropic first
-        if not llm_data or len(llm_data.get("experience", [])) <= len(experience):
-            print("   🔄 Anthropic returned insufficient data — trying OpenRouter...")
-            llm_data = llm_extract_cv_openrouter(text)  # OpenRouter fallback
+        llm_data = llm_extract_cv_cascade(text)
         if llm_data and len(llm_data.get("experience", [])) > len(experience):
             return llm_data
 
@@ -2894,10 +3044,11 @@ def main():
                 print(f"   ✅ Local reconstruction recovered a plausible name — skipping the LLM call entirely.")
                 data = local_data
             else:
-                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM.")
-                data = llm_extract_cv(reconstructed, max_tokens=2048)
+                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM cascade "
+                      "(Ollama local first, then paid APIs only if that's not enough).")
+                data = llm_extract_cv_cascade(reconstructed, max_tokens=2048)
                 if not data:
-                    print("   ⚠️  LLM unavailable — falling back to the (already best-effort) local result")
+                    print("   ⚠️  No LLM rung available — falling back to the (already best-effort) local result")
                     data = local_data
                     # Gate on the OUTPUT, not just the risky input — see looks_like_plausible_name()'s
                     # own docstring for why this second check matters (a risky input does not always
@@ -2911,10 +3062,11 @@ def main():
                         _guess = data.get("candidate_name", "")
                         data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {cv_path} (regex guess: {_guess!r})"
         else:
-            print("   ⚡ Plain-text mode: direct LLM extraction (skipping regex pipeline)")
-            data = llm_extract_cv(text, max_tokens=2048)
+            print("   ⚡ Plain-text mode: LLM cascade extraction (Ollama local first, then paid "
+                  "APIs only if needed — skipping the regex pipeline)")
+            data = llm_extract_cv_cascade(text, max_tokens=2048)
             if not data:
-                print("   ⚠️  LLM unavailable — falling back to regex parser")
+                print("   ⚠️  No LLM rung available — falling back to regex parser")
                 data = parse_cv(text)
     else:
         data = parse_cv(text)
