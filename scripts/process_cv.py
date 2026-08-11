@@ -396,6 +396,88 @@ def looks_like_plausible_name(name: str) -> bool:
         return False
     return True
 
+# A wrapped-URL continuation fragment: a lowercase/digit-starting run of word chars and hyphens
+# with no spaces at all — the shape "anerjee-23rd" takes when "TanmayBanerjee-23rd" got wrapped
+# mid-word across a hard line break by whatever tool exported this .txt.
+_URL_FRAGMENT_RE = re.compile(r'^[a-z0-9][\w\-]*$')
+_URL_BLOB_RE = re.compile(r'https?://\S+', re.IGNORECASE)
+# A short, common sentence-starter word glued directly onto the end of a URL with no separator at
+# all — e.g. ".../in/tanmay-banerjee-576aa7138/To" immediately followed by "secure a Full Stack...".
+# Deliberately a short, SPECIFIC word list (not a general "starts with a capital letter" check) so
+# it doesn't misfire on a legitimately mixed-case URL slug segment like "TanmayBanerjee".
+_GLUED_PROSE_STARTER_RE = re.compile(r'/(To|I|My|A|An|The|For|With|We|As)$')
+
+def reconstruct_broken_lines(text: str) -> str:
+    """Best-effort, LOCAL, zero-cost line-break reconstruction for a collapsed .txt CV — the
+    algorithmic alternative to always reaching for the LLM on this failure shape. Targets the two
+    concrete patterns confirmed on a real inbox file (TANMAY BANERJEE.txt): a name glued directly
+    to its own phone/email on one physical line, and a URL that either wraps mid-word across a hard
+    line break or has trailing prose glued onto it with zero separator. Deliberately narrow and
+    pattern-specific rather than a general prose word-segmenter (there's no dictionary-based
+    word-boundary reconstruction here, e.g. "leveragingstrongback-end" stays as one run of missing
+    spaces) — this recovers the header fields (name/phone/email/URLs) that matter most for
+    candidate_name/candidate_title, not a full-fidelity re-flow of the whole document.
+
+    Verified safe to run unconditionally on ALREADY-clean text too (confirmed against the other 15
+    real inbox files): each pass only fires on the specific glued/wrapped shape it targets, so it's
+    a no-op — or at most a cosmetic line-split with an identical downstream parse_cv() result — on
+    a CV that doesn't have this problem. Still, only call this when looks_like_collapsed_txt() has
+    already flagged the input, to keep it clearly scoped to the failure mode it exists for."""
+    lines = text.splitlines()
+
+    # Pass 1: rejoin a URL that was wrapped mid-word across a hard line break — the line above
+    # looks like an incomplete URL, and the line right after it looks like a bare continuation
+    # fragment (no URL markers of its own, since those are on the line being merged into).
+    merged = []
+    i = 0
+    while i < len(lines):
+        cur = lines[i].strip()
+        if (i + 1 < len(lines) and re.match(r'^https?://', cur, re.IGNORECASE)
+                and _URL_FRAGMENT_RE.match(lines[i + 1].strip())
+                and ' ' not in lines[i + 1].strip()):
+            merged.append(cur + lines[i + 1].strip())
+            i += 2
+        else:
+            merged.append(lines[i])
+            i += 1
+
+    # Pass 2: split a URL blob (everything up to the next real whitespace) from trailing prose
+    # that got glued directly onto it with no separator at all.
+    resplit = []
+    for line in merged:
+        m = _URL_BLOB_RE.search(line)
+        if not m:
+            resplit.append(line)
+            continue
+        blob = m.group(0)
+        pm = _GLUED_PROSE_STARTER_RE.search(blob)
+        if not pm:
+            resplit.append(line)
+            continue
+        split_at = m.start() + pm.start() + 1  # +1 keeps the word itself, drops the leading "/"
+        url_part = line[:split_at - 1]
+        rest = line[split_at:]
+        if url_part.strip():
+            resplit.append(url_part.strip())
+        if rest.strip():
+            resplit.append(rest.strip())
+
+    # Pass 3: split a line where the candidate's name is glued directly onto their own phone or
+    # email with no separator ("TANMAY BANERJEE+91 7098535128 tanmay.banerjee23rd@gmail.com").
+    final = []
+    for line in resplit:
+        m = PHONE_RE.search(line) or EMAIL_RE.search(line)
+        if m and m.start() > 0:
+            before, after = line[:m.start()].strip(), line[m.start():].strip()
+            if before:
+                final.append(before)
+            if after:
+                final.append(after)
+        else:
+            final.append(line)
+
+    return '\n'.join(final)
+
 def parse_header(header_text: str) -> dict:
     lines = [l.strip() for l in header_text.splitlines() if l.strip()]
 
@@ -2797,31 +2879,43 @@ def main():
         text = fix_char_spacing(text)
         is_collapsed = looks_like_collapsed_txt(text)
         if is_collapsed:
-            print("   ⚠️  This .txt looks like a collapsed/pasted dump, not cleanly line-broken "
-                  "plain text — LLM extraction is required for a reliable result here.")
-        print("   ⚡ Plain-text mode: direct LLM extraction (skipping regex pipeline)")
-        data = llm_extract_cv(text, max_tokens=2048)
-        if not data:
-            print("   ⚠️  LLM unavailable — falling back to regex parser")
-            data = parse_cv(text)
-            # Gate on the OUTPUT too, not just the risky input — looks_like_collapsed_txt() flags
-            # the INPUT as risky, but parse_header()'s own guards sometimes still recover the real
-            # name despite messy surrounding text (confirmed: this fix's own split_sections()
-            # improvement above rescues candidate_name correctly for some collapsed-flagged files).
-            # Without this second check, a genuinely correct result got needlessly overwritten
-            # just because the source file looked risky — caught by re-running the full inbox
-            # regression sweep before shipping, not assumed.
-            if is_collapsed and not looks_like_plausible_name(data.get("candidate_name", "")):
-                # parse_cv()'s line-based heuristics fundamentally cannot recover structure a
-                # collapsed dump never had — they were producing a plausible-LOOKING-but-wrong
-                # guess (e.g. "anerjee-23rd", a URL-slug fragment mistaken for a name, for a real
-                # inbox file) rather than an obvious failure. Per the "no silent wrong data"
-                # design rule this pipeline otherwise follows: don't let a low-confidence guess
-                # for a structurally-unparseable input ship as if it were a normal extraction —
-                # flag it loudly instead. The original regex guess is kept in parens so a human
-                # reviewer can still see what was attempted.
-                _guess = data.get("candidate_name", "")
-                data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {cv_path} (regex guess: {_guess!r})"
+            # Collapsed input gets a DIFFERENT priority order than the normal .txt fast path:
+            # try the free, local, zero-latency reconstruction+regex path FIRST, and only spend
+            # an LLM call if that still isn't good enough — the exact inverse of the LLM-first
+            # priority below, deliberately, so a structurally-recoverable file (confirmed: this
+            # correctly recovers TANMAY BANERJEE.txt's real name with ZERO API calls) doesn't
+            # pay LLM cost/latency it doesn't need. Falls through to the normal LLM-first branch
+            # below only when this local attempt doesn't produce a plausible name.
+            print("   🔧 This .txt looks like a collapsed/pasted dump — attempting local, "
+                  "zero-cost line-break reconstruction before spending an LLM call on it.")
+            reconstructed = reconstruct_broken_lines(text)
+            local_data = parse_cv(reconstructed)
+            if looks_like_plausible_name(local_data.get("candidate_name", "")):
+                print(f"   ✅ Local reconstruction recovered a plausible name — skipping the LLM call entirely.")
+                data = local_data
+            else:
+                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM.")
+                data = llm_extract_cv(reconstructed, max_tokens=2048)
+                if not data:
+                    print("   ⚠️  LLM unavailable — falling back to the (already best-effort) local result")
+                    data = local_data
+                    # Gate on the OUTPUT, not just the risky input — see looks_like_plausible_name()'s
+                    # own docstring for why this second check matters (a risky input does not always
+                    # produce a bad output, so don't discard a result that's actually fine).
+                    if not looks_like_plausible_name(data.get("candidate_name", "")):
+                        # Per the "no silent wrong data" design rule this pipeline otherwise follows:
+                        # don't let a low-confidence guess for a structurally-unparseable input ship
+                        # as if it were a normal extraction — flag it loudly instead. The original
+                        # regex guess is kept in parens so a human reviewer can still see what was
+                        # attempted, both by reconstruction AND by the plain regex parser.
+                        _guess = data.get("candidate_name", "")
+                        data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {cv_path} (regex guess: {_guess!r})"
+        else:
+            print("   ⚡ Plain-text mode: direct LLM extraction (skipping regex pipeline)")
+            data = llm_extract_cv(text, max_tokens=2048)
+            if not data:
+                print("   ⚠️  LLM unavailable — falling back to regex parser")
+                data = parse_cv(text)
     else:
         data = parse_cv(text)
     print(f"   Candidate:      {data['candidate_name']}")

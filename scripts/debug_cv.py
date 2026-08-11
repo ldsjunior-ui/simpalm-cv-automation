@@ -13,7 +13,7 @@ from pathlib import Path
 # Make sure process_cv is importable from repo root
 sys.path.insert(0, str(Path(__file__).parent))
 from process_cv import (extract_text, fix_char_spacing, parse_cv, llm_extract_cv,
-                         COMPANY_INDICATOR_WORDS, ROLE_TITLE_WORDS,
+                         COMPANY_INDICATOR_WORDS, ROLE_TITLE_WORDS, reconstruct_broken_lines,
                          looks_like_collapsed_txt, looks_like_plausible_name, COLLAPSED_TXT_WARNING)
 
 INBOX = Path(__file__).parent.parent / "inbox"
@@ -36,17 +36,33 @@ def test_cv(path: str) -> dict:
         text = fix_char_spacing(text)  # mirrors the same fix now in main() — see its comment
         is_collapsed = looks_like_collapsed_txt(text)
         if is_collapsed:
-            print("   ⚠️  Looks like a collapsed/pasted dump, not cleanly line-broken plain text.")
-        data = llm_extract_cv(text, max_tokens=2048)
-        if not data:
-            print("   ⚠️  LLM unavailable (no ANTHROPIC_API_KEY, or the call failed) — falling back "
-                  "to the regex parser. This does NOT prove the real .txt/LLM path is correct; it only "
-                  "proves parse_cv()'s fallback is. Set ANTHROPIC_API_KEY to test the actual production path.")
-            data = parse_cv(text)
-            # Gate on the OUTPUT too, not just the risky input — see main()'s matching comment.
-            if is_collapsed and not looks_like_plausible_name(data.get("candidate_name", "")):
-                _guess = data.get("candidate_name", "")
-                data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {Path(path).name} (regex guess: {_guess!r})"
+            # Mirrors main()'s priority flip exactly — see its comment for the full rationale:
+            # try free/local reconstruction+regex FIRST, only spend an LLM call if that's not
+            # good enough. Confirmed this alone recovers TANMAY BANERJEE.txt's real name with
+            # zero API calls.
+            print("   🔧 Looks like a collapsed/pasted dump — trying local reconstruction first.")
+            reconstructed = reconstruct_broken_lines(text)
+            local_data = parse_cv(reconstructed)
+            if looks_like_plausible_name(local_data.get("candidate_name", "")):
+                print("   ✅ Local reconstruction recovered a plausible name — LLM call skipped entirely.")
+                data = local_data
+            else:
+                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM.")
+                data = llm_extract_cv(reconstructed, max_tokens=2048)
+                if not data:
+                    print("   ⚠️  LLM unavailable (no ANTHROPIC_API_KEY, or the call failed) — using "
+                          "the local reconstruction result as-is.")
+                    data = local_data
+                    if not looks_like_plausible_name(data.get("candidate_name", "")):
+                        _guess = data.get("candidate_name", "")
+                        data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {Path(path).name} (regex guess: {_guess!r})"
+        else:
+            data = llm_extract_cv(text, max_tokens=2048)
+            if not data:
+                print("   ⚠️  LLM unavailable (no ANTHROPIC_API_KEY, or the call failed) — falling back "
+                      "to the regex parser. This does NOT prove the real .txt/LLM path is correct; it only "
+                      "proves parse_cv()'s fallback is. Set ANTHROPIC_API_KEY to test the actual production path.")
+                data = parse_cv(text)
     else:
         data = parse_cv(text)
     return data
