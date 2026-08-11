@@ -142,11 +142,23 @@ def split_sections(text: str) -> dict:
         "awards": [], "volunteer": [], "_overflow": [],
     }
     current = "_header"
+    # True once _header has captured at least one real line. Guards against a CV that opens
+    # with a bare section-heading label BEFORE the candidate's own name/contact info — a real
+    # observed case: a .txt CV whose very first line is literally "SUMMARY", with the name on
+    # line 2. Without this guard, that first line matches SECTION_PATTERNS["summary"] on
+    # iteration 1, switches `current` away from "_header" immediately, and the name (plus every
+    # other header field) gets swallowed into the summary section instead — parse_header("")
+    # then has nothing to work with and candidate_name silently defaults to "Candidate".
+    _header_has_content = False
 
     for line in lines:
         stripped = line.strip()
         matched = False
         for section, pattern in SECTION_PATTERNS.items():
+            # Guard 0: never switch away from _header before it has captured anything at all —
+            # a bare heading seen before any real header content is noise, not a real transition.
+            if current == "_header" and not _header_has_content:
+                continue
             # Guard 1: true section headings are short (≤ 60 chars).
             # Prevents "Experience in setting up Azure Data Factory..." from matching.
             # Exception: "HEADING | inline content" — the "|" separator indicates the
@@ -215,6 +227,8 @@ def split_sections(text: str) -> dict:
                     current = "_overflow"
                     sections[current].append(line)
             else:
+                if current == "_header" and stripped:
+                    _header_has_content = True
                 sections[current].append(line)
 
     return {k: "\n".join(v).strip() for k, v in sections.items()}
@@ -314,6 +328,71 @@ def _looks_like_valid_title(text: str) -> bool:
     if text.count('(') >= 2:
         return False
     if re.match(r'^(bilingual|languages?|fluent|native\s+speaker)\b', text, re.IGNORECASE):
+        return False
+    return True
+
+# ── Collapsed / dirty plain-text detection ────────────────────────────────────
+# The .txt fast path (see main(), further down) is built on one assumption: a .txt upload is
+# already clean, properly line-broken plain text, so it can skip the whole PDF-noise regex
+# pipeline (parse_header/parse_experience's line-based boundary detection) and go straight to
+# the LLM. That assumption does not always hold — real inbox uploads have arrived as raw
+# copy-paste dumps (from a PDF viewer or a web page) that preserve paragraph-level line breaks
+# only, not CV-structural ones: name, phone, and email end up glued onto one line; an entire
+# multi-sentence profile summary is one "line"; a URL wraps mid-word across a line boundary
+# with no scheme marker left on either half. parse_cv()'s line-based heuristics fundamentally
+# cannot recover structure that was never there, no matter how many more regex guards get added
+# — the same fix philosophy as extract_text_pdf()'s multi-column-collapse detector (Section 1 of
+# the resume-parsing-engineering skill), applied to this different failure shape.
+COLLAPSED_TXT_WARNING = "NEEDS MANUAL REVIEW"
+
+def looks_like_collapsed_txt(text: str) -> bool:
+    """True when a .txt CV looks like a collapsed paragraph-dump rather than genuinely clean,
+    line-broken plain text. Two independent signals, either one is sufficient:
+
+    1. Wall-of-text shape: a real CV's lines (name, contact fields, job titles, bullets) are
+       almost all well under 150 chars; a copy-paste dump instead produces a good share of very
+       long, paragraph-scale lines. Deliberately conservative (requires both a low line count AND
+       a high proportion of long lines) so it doesn't fire on a normal CV with just a couple of
+       long bullet points.
+    2. Header-concatenation shape: name/phone/email/URL — each of which should be its OWN line —
+       instead glued onto the same physical line. This is the more precise, more common real
+       failure: it directly breaks parse_header()'s one-field-per-line assumption even when the
+       REST of the document is reasonably well-broken and signal 1 alone wouldn't fire (a
+       document can have a badly-glued header while its body still wraps normally)."""
+    nonempty = [l for l in text.splitlines() if l.strip()]
+    if not nonempty:
+        return False
+    long_lines = sum(1 for l in nonempty if len(l) > 150)
+    if len(nonempty) < 60 and (long_lines / len(nonempty)) > 0.35:
+        return True
+    for line in nonempty[:3]:
+        _has_url = bool(re.search(r'https?://|www\.[\w-]', line, re.IGNORECASE))
+        _field_hits = sum(1 for pat in (EMAIL_RE, PHONE_RE) if pat.search(line))
+        if (_field_hits + _has_url) >= 2:
+            return True
+    return False
+
+def looks_like_plausible_name(name: str) -> bool:
+    """Sanity check on an ALREADY-EXTRACTED candidate_name — distinct from parse_header()'s own
+    name-loop validation (which runs on raw candidate LINES before extraction ever happens). This
+    runs on the final value to decide whether a collapsed/dirty .txt's regex-fallback result is
+    trustworthy enough to keep as-is.
+
+    This matters because looks_like_collapsed_txt() flags an INPUT as risky, but risky input does
+    not always produce a bad OUTPUT — parse_header()'s existing guards sometimes still recover the
+    real name despite messy surrounding text. Gating the "flag for manual review" override on this
+    check too (not on looks_like_collapsed_txt() alone) is what stops a genuinely correct result
+    from getting needlessly overwritten just because the source file looked risky."""
+    if not name or name in ("Candidate", "Unknown Candidate"):
+        return False
+    words = name.split()
+    if not (1 <= len(words) <= 5):
+        return False
+    if not all(w[:1].isalpha() for w in words):
+        return False
+    # URL-slug-shaped: all-lowercase with a hyphen or slash, e.g. "anerjee-23rd" — a wrapped
+    # URL/GitHub-handle fragment mistaken for a name, not a real human name shape.
+    if re.search(r'[\-/]', name) and name == name.lower():
         return False
     return True
 
@@ -2713,15 +2792,36 @@ def main():
     # bullet glyphs, concatenated tokens. Running it here is a strict improvement (idempotent no-op
     # on text that's genuinely already clean) even though it does NOT by itself fix the harder case
     # of tokens with NO separator at all between them (e.g. "NAME+91 12345 name@mail.com" glued into
-    # one run — that needs either the LLM path to actually succeed, or a further, deliberate
-    # heuristic to detect and re-synthesize line breaks in a collapsed .txt dump).
+    # one run — see looks_like_collapsed_txt() below for that case specifically.
     if ext in ('.txt', '.text'):
         text = fix_char_spacing(text)
+        is_collapsed = looks_like_collapsed_txt(text)
+        if is_collapsed:
+            print("   ⚠️  This .txt looks like a collapsed/pasted dump, not cleanly line-broken "
+                  "plain text — LLM extraction is required for a reliable result here.")
         print("   ⚡ Plain-text mode: direct LLM extraction (skipping regex pipeline)")
         data = llm_extract_cv(text, max_tokens=2048)
         if not data:
             print("   ⚠️  LLM unavailable — falling back to regex parser")
             data = parse_cv(text)
+            # Gate on the OUTPUT too, not just the risky input — looks_like_collapsed_txt() flags
+            # the INPUT as risky, but parse_header()'s own guards sometimes still recover the real
+            # name despite messy surrounding text (confirmed: this fix's own split_sections()
+            # improvement above rescues candidate_name correctly for some collapsed-flagged files).
+            # Without this second check, a genuinely correct result got needlessly overwritten
+            # just because the source file looked risky — caught by re-running the full inbox
+            # regression sweep before shipping, not assumed.
+            if is_collapsed and not looks_like_plausible_name(data.get("candidate_name", "")):
+                # parse_cv()'s line-based heuristics fundamentally cannot recover structure a
+                # collapsed dump never had — they were producing a plausible-LOOKING-but-wrong
+                # guess (e.g. "anerjee-23rd", a URL-slug fragment mistaken for a name, for a real
+                # inbox file) rather than an obvious failure. Per the "no silent wrong data"
+                # design rule this pipeline otherwise follows: don't let a low-confidence guess
+                # for a structurally-unparseable input ship as if it were a normal extraction —
+                # flag it loudly instead. The original regex guess is kept in parens so a human
+                # reviewer can still see what was attempted.
+                _guess = data.get("candidate_name", "")
+                data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {cv_path} (regex guess: {_guess!r})"
     else:
         data = parse_cv(text)
     print(f"   Candidate:      {data['candidate_name']}")

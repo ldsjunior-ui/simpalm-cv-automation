@@ -12,7 +12,9 @@ from pathlib import Path
 
 # Make sure process_cv is importable from repo root
 sys.path.insert(0, str(Path(__file__).parent))
-from process_cv import extract_text, fix_char_spacing, parse_cv, llm_extract_cv, COMPANY_INDICATOR_WORDS, ROLE_TITLE_WORDS
+from process_cv import (extract_text, fix_char_spacing, parse_cv, llm_extract_cv,
+                         COMPANY_INDICATOR_WORDS, ROLE_TITLE_WORDS,
+                         looks_like_collapsed_txt, looks_like_plausible_name, COLLAPSED_TXT_WARNING)
 
 INBOX = Path(__file__).parent.parent / "inbox"
 
@@ -32,12 +34,19 @@ def test_cv(path: str) -> dict:
     # .txt"), the local pre-push verification tool was blind to its own main input format.
     if ext in ('.txt', '.text'):
         text = fix_char_spacing(text)  # mirrors the same fix now in main() — see its comment
+        is_collapsed = looks_like_collapsed_txt(text)
+        if is_collapsed:
+            print("   ⚠️  Looks like a collapsed/pasted dump, not cleanly line-broken plain text.")
         data = llm_extract_cv(text, max_tokens=2048)
         if not data:
             print("   ⚠️  LLM unavailable (no ANTHROPIC_API_KEY, or the call failed) — falling back "
                   "to the regex parser. This does NOT prove the real .txt/LLM path is correct; it only "
                   "proves parse_cv()'s fallback is. Set ANTHROPIC_API_KEY to test the actual production path.")
             data = parse_cv(text)
+            # Gate on the OUTPUT too, not just the risky input — see main()'s matching comment.
+            if is_collapsed and not looks_like_plausible_name(data.get("candidate_name", "")):
+                _guess = data.get("candidate_name", "")
+                data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {Path(path).name} (regex guess: {_guess!r})"
     else:
         data = parse_cv(text)
     return data
@@ -52,7 +61,7 @@ def report(path: str, data: dict):
 
     # Quality flags
     flags = []
-    if name in ("Candidate", "Unknown Candidate", ""):
+    if name in ("Candidate", "Unknown Candidate", "") or name.startswith(COLLAPSED_TXT_WARNING):
         flags.append("❌ NAME_FAIL")
     if " " not in name and len(name) > 8 and name == name.upper():
         flags.append("❌ NAME_NO_SPACE")
@@ -118,7 +127,8 @@ def main():
             data = test_cv(str(p))
             report(str(p), data)
             flags = []
-            if data["candidate_name"] in ("Candidate", "Unknown Candidate", ""):
+            _cand_name = data["candidate_name"]
+            if _cand_name in ("Candidate", "Unknown Candidate", "") or _cand_name.startswith(COLLAPSED_TXT_WARNING):
                 flags.append("NAME_FAIL")
             if flags:
                 fail += 1
