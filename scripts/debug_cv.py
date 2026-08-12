@@ -25,46 +25,38 @@ def test_cv(path: str) -> dict:
     # previous version of this script did, was a harmless-in-practice but redundant double
     # application. Mirror main()'s actual code exactly: extract once, don't re-clean.
     text = extract_text(path)
-    # .txt/.text files take a DIFFERENT code path in production (main()): they skip the regex
-    # pipeline entirely and go straight to llm_extract_cv_cascade() (Ollama local -> Anthropic ->
-    # OpenRouter), with parse_cv() only as a fallback if every LLM rung fails. Before an earlier
-    # fix, debug_cv.py always called parse_cv() regardless of extension — meaning it silently
-    # tested a code path .txt files NEVER actually take in production, and its default no-args
-    # sweep didn't even glob .txt files at all. Since the pipeline's docs describe .txt as the
-    # PRIMARY input format ("Pipeline agora recebe APENAS .txt"), the local pre-push verification
-    # tool was blind to its own main input format.
+    # .txt/.text files now take the SAME priority as PDF/DOCX in production (main(), 2026-08-11
+    # flip): parse_cv() runs FIRST (reconstructing line breaks first if the text looks collapsed),
+    # LLM cascade (Ollama local -> Anthropic -> OpenRouter) only fires if the local result's name
+    # isn't plausible. This replaces the 2026-05-07 "always LLM for plain .txt" design, an
+    # untested speed assumption falsified by this session's own Ollama-latency-under-load data
+    # (see process_cv.py's main() comment for the full rationale). Mirror main()'s real code path
+    # exactly here — debug_cv.py testing a path production doesn't actually take defeats the point
+    # of a pre-push local verification tool (this exact blind spot bit this pipeline before).
     if ext in ('.txt', '.text'):
         text = fix_char_spacing(text)  # mirrors the same fix now in main() — see its comment
         is_collapsed = looks_like_collapsed_txt(text)
+        text_to_parse = text
         if is_collapsed:
-            # Mirrors main()'s priority flip exactly — see its comment for the full rationale:
-            # try free/local reconstruction+regex FIRST, only spend an LLM call if that's not
-            # good enough. Confirmed this alone recovers TANMAY BANERJEE.txt's real name with
-            # zero API calls.
-            print("   🔧 Looks like a collapsed/pasted dump — trying local reconstruction first.")
-            reconstructed = reconstruct_broken_lines(text)
-            local_data = parse_cv(reconstructed)
-            if looks_like_plausible_name(local_data.get("candidate_name", "")):
-                print("   ✅ Local reconstruction recovered a plausible name — LLM call skipped entirely.")
-                data = local_data
-            else:
-                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM cascade "
-                      "(Ollama local first, then paid APIs only if needed).")
-                data = llm_extract_cv_cascade(reconstructed, max_tokens=2048)
-                if not data:
-                    print("   ⚠️  No LLM rung available (Ollama not running and no ANTHROPIC_API_KEY/"
-                          "OPENROUTER_API_KEY) — using the local reconstruction result as-is.")
-                    data = local_data
-                    if not looks_like_plausible_name(data.get("candidate_name", "")):
-                        _guess = data.get("candidate_name", "")
-                        data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {Path(path).name} (regex guess: {_guess!r})"
+            print("   🔧 Looks like a collapsed/pasted dump — reconstructing line breaks first.")
+            text_to_parse = reconstruct_broken_lines(text)
         else:
-            data = llm_extract_cv_cascade(text, max_tokens=2048)
+            print("   ⚡ Plain-text mode: trying the local regex parser first.")
+        local_data = parse_cv(text_to_parse)
+        if looks_like_plausible_name(local_data.get("candidate_name", "")):
+            print("   ✅ Local regex parse recovered a plausible name — LLM call skipped entirely.")
+            data = local_data
+        else:
+            print("   ⚠️  Local parse wasn't enough on its own — trying the LLM cascade "
+                  "(Ollama local first, then paid APIs only if needed).")
+            data = llm_extract_cv_cascade(text_to_parse, max_tokens=2048)
             if not data:
                 print("   ⚠️  No LLM rung available (Ollama not running and no ANTHROPIC_API_KEY/"
-                      "OPENROUTER_API_KEY) — falling back to the regex parser. This does NOT prove the "
-                      "real .txt/LLM path is correct; it only proves parse_cv()'s fallback is.")
-                data = parse_cv(text)
+                      "OPENROUTER_API_KEY) — using the local parse result as-is.")
+                data = local_data
+                if not looks_like_plausible_name(data.get("candidate_name", "")):
+                    _guess = data.get("candidate_name", "")
+                    data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {Path(path).name} (regex guess: {_guess!r})"
     else:
         data = parse_cv(text)
     return data

@@ -3013,61 +3013,60 @@ def main():
     print(f"   Extracted {len(text)} characters")
 
     # 2. Parse structured data
-    # .txt fast path: skip regex pipeline — plain text is already clean,
-    # LLM extracts faster and more accurately. max_tokens=2048 is enough.
+    # .txt fast path: try the local regex parser FIRST, same priority PDF/DOCX always had,
+    # LLM cascade only as an escalation. This flips a 2026-05-07 decision that sent EVERY
+    # non-collapsed .txt straight to the LLM cascade, skipping parse_cv() entirely, on the
+    # assumption "plain text is already clean, LLM extracts faster and more accurately" —
+    # an assumption that was never tested and that this same session's own data falsified:
+    # Ollama latency under real load reached ~79s+ for a single call (see llm_extract_cv_ollama()'s
+    # docstring), while parse_cv() runs in well under a second. An empirical sweep against the
+    # real inbox corpus (2026-08-11) found 5 of 8 real .txt files were hitting the "always LLM"
+    # branch purely by this untested design assumption, never having been given a regex attempt
+    # at all — the opposite of where an LLM should be needed, since well-formatted plain text is
+    # the EASIEST case for a regex parser, not the hardest. parse_cv() itself was hardened
+    # extensively this same session (title/location/name misclassification fixes) specifically
+    # on real CV text, so it's no longer the "built for noisy PDFs only" parser the original
+    # 2026-05-07 rationale assumed.
     #
-    # "Already clean" is an assumption, not a guarantee — extract_text() reads a .txt file
-    # verbatim with ZERO cleanup (unlike the PDF/DOCX branches, which both run fix_char_spacing()
-    # internally). In production this assumption has already been falsified: real inbox files
-    # (copy-pasted from a PDF viewer or a LinkedIn export rather than typed as plain text) arrive
-    # with the exact same artifacts fix_char_spacing() exists to catch — NUL bytes, Private-Use-Area
-    # bullet glyphs, concatenated tokens. Running it here is a strict improvement (idempotent no-op
-    # on text that's genuinely already clean) even though it does NOT by itself fix the harder case
-    # of tokens with NO separator at all between them (e.g. "NAME+91 12345 name@mail.com" glued into
-    # one run — see looks_like_collapsed_txt() below for that case specifically.
+    # extract_text() reads a .txt file verbatim with ZERO cleanup (unlike the PDF/DOCX branches,
+    # which both run fix_char_spacing() internally) — real inbox files (copy-pasted from a PDF
+    # viewer or a LinkedIn export rather than typed as plain text) arrive with the exact same
+    # artifacts fix_char_spacing() exists to catch, so run it here too before anything else.
     if ext in ('.txt', '.text'):
         text = fix_char_spacing(text)
         is_collapsed = looks_like_collapsed_txt(text)
+        # Only genuinely glued/collapsed input needs line-break reconstruction before parsing —
+        # for everything else, parse_cv() runs directly on the (char-spacing-fixed) text.
+        text_to_parse = text
         if is_collapsed:
-            # Collapsed input gets a DIFFERENT priority order than the normal .txt fast path:
-            # try the free, local, zero-latency reconstruction+regex path FIRST, and only spend
-            # an LLM call if that still isn't good enough — the exact inverse of the LLM-first
-            # priority below, deliberately, so a structurally-recoverable file (confirmed: this
-            # correctly recovers TANMAY BANERJEE.txt's real name with ZERO API calls) doesn't
-            # pay LLM cost/latency it doesn't need. Falls through to the normal LLM-first branch
-            # below only when this local attempt doesn't produce a plausible name.
-            print("   🔧 This .txt looks like a collapsed/pasted dump — attempting local, "
-                  "zero-cost line-break reconstruction before spending an LLM call on it.")
-            reconstructed = reconstruct_broken_lines(text)
-            local_data = parse_cv(reconstructed)
-            if looks_like_plausible_name(local_data.get("candidate_name", "")):
-                print(f"   ✅ Local reconstruction recovered a plausible name — skipping the LLM call entirely.")
-                data = local_data
-            else:
-                print("   ⚠️  Local reconstruction wasn't enough on its own — trying the LLM cascade "
-                      "(Ollama local first, then paid APIs only if that's not enough).")
-                data = llm_extract_cv_cascade(reconstructed, max_tokens=2048)
-                if not data:
-                    print("   ⚠️  No LLM rung available — falling back to the (already best-effort) local result")
-                    data = local_data
-                    # Gate on the OUTPUT, not just the risky input — see looks_like_plausible_name()'s
-                    # own docstring for why this second check matters (a risky input does not always
-                    # produce a bad output, so don't discard a result that's actually fine).
-                    if not looks_like_plausible_name(data.get("candidate_name", "")):
-                        # Per the "no silent wrong data" design rule this pipeline otherwise follows:
-                        # don't let a low-confidence guess for a structurally-unparseable input ship
-                        # as if it were a normal extraction — flag it loudly instead. The original
-                        # regex guess is kept in parens so a human reviewer can still see what was
-                        # attempted, both by reconstruction AND by the plain regex parser.
-                        _guess = data.get("candidate_name", "")
-                        data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {cv_path} (regex guess: {_guess!r})"
+            print("   🔧 This .txt looks like a collapsed/pasted dump — reconstructing line "
+                  "breaks first (zero-cost, local) before parsing.")
+            text_to_parse = reconstruct_broken_lines(text)
         else:
-            print("   ⚡ Plain-text mode: LLM cascade extraction (Ollama local first, then paid "
-                  "APIs only if needed — skipping the regex pipeline)")
-            data = llm_extract_cv_cascade(text, max_tokens=2048)
+            print("   ⚡ Plain-text mode: trying the local regex parser first (same pipeline as "
+                  "PDF/DOCX) — LLM cascade only if it's not good enough.")
+        local_data = parse_cv(text_to_parse)
+        if looks_like_plausible_name(local_data.get("candidate_name", "")):
+            print("   ✅ Local regex parse recovered a plausible name — LLM call skipped entirely.")
+            data = local_data
+        else:
+            print("   ⚠️  Local parse wasn't enough on its own — trying the LLM cascade "
+                  "(Ollama local first, then paid APIs only if that's not enough).")
+            data = llm_extract_cv_cascade(text_to_parse, max_tokens=2048)
             if not data:
-                print("   ⚠️  No LLM rung available — falling back to regex parser")
-                data = parse_cv(text)
+                print("   ⚠️  No LLM rung available — falling back to the (already best-effort) local result")
+                data = local_data
+                # Gate on the OUTPUT, not just the risky input — see looks_like_plausible_name()'s
+                # own docstring for why this second check matters (a risky input does not always
+                # produce a bad output, so don't discard a result that's actually fine).
+                if not looks_like_plausible_name(data.get("candidate_name", "")):
+                    # Per the "no silent wrong data" design rule this pipeline otherwise follows:
+                    # don't let a low-confidence guess for a structurally-unparseable input ship
+                    # as if it were a normal extraction — flag it loudly instead. The original
+                    # regex guess is kept in parens so a human reviewer can still see what was
+                    # attempted, both by reconstruction (if collapsed) AND by the plain regex parser.
+                    _guess = data.get("candidate_name", "")
+                    data["candidate_name"] = f"{COLLAPSED_TXT_WARNING} — {cv_path} (regex guess: {_guess!r})"
     else:
         data = parse_cv(text)
     print(f"   Candidate:      {data['candidate_name']}")
